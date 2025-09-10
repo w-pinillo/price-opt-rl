@@ -1,4 +1,7 @@
+polars
 pandas
+matplotlib
+seaborn
+numpy
 pyarrow
-dask
 fastparquet
