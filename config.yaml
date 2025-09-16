@@ -1,0 +1,52 @@
+# config.yaml
+
+# Objective 2: MDP and Simulation Environment Configuration
+
+env:
+  action_type: discrete # Options: discrete, continuous
+  discrete_action_map: [0.9, 0.95, 1.0, 1.05, 1.1] # Price multipliers for discrete actions
+  action_low: 0.8 # Lower bound for continuous action price multiplier
+  action_high: 1.2 # Upper bound for continuous action price multiplier
+  reward_formulation: revenue # Options: revenue, profit, revenue_minus_volatility
+  demand_simulator_approach: parametric # Options: parametric, ml_model
+  episode_horizon: 365 # Number of days in one episode
+
+  # Parametric Demand Simulator Parameters
+  parametric_simulator:
+    beta_price: -2.0 # Price elasticity coefficient
+    noise_std: 0.1 # Standard deviation of demand noise
+    base_demand: 100.0 # Base demand when price is reference price
+    ref_price: 1.0 # Reference price for elasticity calculation
+
+# Objective 3: DRL Agent Training Configuration (placeholders for now)
+
+dqn:
+  learning_rate: 0.0001
+  buffer_size: 100000
+  batch_size: 32
+  gamma: 0.99
+  target_update_interval: 1000
+  policy_architecture: [256, 256]
+
+ppo:
+  learning_rate: 0.0003
+  n_steps: 2048
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  policy_architecture: [256, 256]
+
+# Cross-cutting Configuration
+
+training:
+  total_timesteps: 1000000
+  eval_freq: 10000
+  n_eval_episodes: 10
+  seed: 42
+
+paths:
+  raw_data: data/transactions.parquet
+  processed_data_dir: data/processed
+  scalers_dir: models/scalers
+  models_dir: models
