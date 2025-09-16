@@ -5,3 +5,5 @@ seaborn
 numpy
 pyarrow
 fastparquet
+joblib
+scikit-learn
