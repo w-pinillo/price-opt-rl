@@ -31,4 +31,3 @@ class ParametricDemandSimulator:
         # Ensure demand is non-negative
         return max(0, demand)
 
-# You can add other simulators here if needed, e.g., ML-based simulators

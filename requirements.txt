@@ -8,3 +8,6 @@ fastparquet
 joblib
 scikit-learn
 gymnasium
+stable-baselines3
+torch
+tensorboard

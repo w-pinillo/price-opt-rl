@@ -96,4 +96,18 @@ def generate_time_series_features(df: pl.DataFrame) -> pl.DataFrame:
     ])
     return df_with_features
 
+def temporal_split(df: pl.DataFrame, train_end_date: str, val_end_date: str) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    """
+    Splits the DataFrame into training, validation, and test sets based on dates.
+    Dates should be in 'YYYY-MM-DD' format.
+    """
+    train_df = df.filter(pl.col("SHOP_DATE") <= pl.lit(train_end_date).str.strptime(pl.Date, "%Y-%m-%d"))
+    val_df = df.filter(
+        (pl.col("SHOP_DATE") > pl.lit(train_end_date).str.strptime(pl.Date, "%Y-%m-%d")) &
+        (pl.col("SHOP_DATE") <= pl.lit(val_end_date).str.strptime(pl.Date, "%Y-%m-%d"))
+    )
+    test_df = df.filter(pl.col("SHOP_DATE") > pl.lit(val_end_date).str.strptime(pl.Date, "%Y-%m-%d"))
+
+    return train_df, val_df, test_df
+
 
