@@ -41,4 +41,54 @@
 **Optimality Assessment:**
 - The training pipeline is now complete for both DQN and PPO agents. The scripts are configurable and leverage best practices like callbacks for saving the best model. This fulfills the requirements of Objective 3.
 
-**Next Steps:** Proceed with Objective 4: Evaluation and comparison of the trained agents against baselines.
+## Objective 4 — Evaluation and comparison
+
+**Status:** Completed
+
+**Details:**
+- An evaluation script, `src/evaluation.py`, was created to perform a backtest of the trained agents against a "do-nothing" baseline across all 100 top-selling products.
+- The script calculates key performance metrics including total revenue, average daily revenue, average price, and price volatility for each agent and product.
+- The detailed results are saved to `reports/tables/metrics_summary.csv`.
+- A new Jupyter Notebook, `notebooks/02-Evaluation.ipynb`, has been created to analyze and visualize the results.
+- The notebook includes a summary table of aggregated metrics, a bar chart comparing total revenues, and a bootstrapping analysis to confirm the statistical significance of the agents' performance uplift over the baseline.
+- Both DQN and PPO agents demonstrated a significant, multi-fold increase in total revenue compared to the baseline, with PPO performing slightly better.
+
+**Optimality Assessment:**
+- The evaluation pipeline is complete, providing a robust and statistically validated comparison of the trained agents against a baseline. The results are clearly documented and visualized, fulfilling the requirements of Objective 4.
+
+**Next Steps:** All primary project objectives have been met. The next logical step is to integrate these findings and methodologies into the final thesis document.
+
+## LaTeX Thesis Template Guide
+
+This section summarizes how to work with the LaTeX template located in the `trabajo-final/` directory.
+
+- **Main File:** The main file is `0000.tex`. All other `.tex` files are included from here.
+- **Compilation:** To compile the document, run the following commands from within the `trabajo-final/` directory:
+    1. `pdflatex -shell-escape 0000.tex`
+    2. `bibtex 0000`
+    3. `pdflatex -shell-escape 0000.tex`
+    4. `pdflatex -shell-escape 0000.tex`
+- **Dependencies:**
+    - The `-shell-escape` flag is required for the `minted` package (used for code highlighting).
+    - The `lmodern` package is required for the `microtype` package to work correctly.
+    - You may need to install language packs for `babel`, for example: `sudo apt-get install texlive-lang-spanish`.
+- **Packages:** Additional LaTeX packages can be added in `0000.tex` using the `\usepackage{}` command.
+- **Comments:** Use the `%` character to add comments to the `.tex` files.
+- **Document Structure:** Use the following commands to structure the document:
+    - `\chapter{Chapter Name}`
+    - `\section{Section Name}`
+    - `\subsection{Subsection Name}`
+    - `\subsubsection{Subsubsection Name}`
+    - `\paragraph{Paragraph Name}`
+- **Paragraphs:** Use `\par` to start a new paragraph with the correct spacing.
+- **Images:** 
+    - Use the `figure` environment to include images that should be listed in the "Lista de Figuras".
+    - Store image files in the `00Figuras/` directory.
+    - `\includegraphics` to insert the image and `\caption` to add a caption.
+- **Tables:**
+    - Use the `table` environment to include tables that should be listed in the "Lista de Tablas".
+    - The guide suggests using online tools like [Table Generator](https://www.tablesgenerator.com/) to create complex tables.
+- **Lists:**
+    - Use the `itemize` environment for bulleted lists.
+    - Use the `enumerate` environment for numbered lists.
+- **Bibliography:** Add new references to the `Referencias.bib` file.

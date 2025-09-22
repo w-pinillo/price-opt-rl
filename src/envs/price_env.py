@@ -74,11 +74,15 @@ class PriceEnv(gym.Env):
             "scaled_avg_price": current_row.get("avg_price"),
         }
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, options=None, sequential: bool = False):
         super().reset(seed=seed)
+
+        if sequential:
+            self.start_step = 0
+        else:
+            max_start_step = len(self.df) - self.episode_horizon - 1
+            self.start_step = self.np_random.integers(0, max_start_step + 1) if max_start_step > 0 else 0
         
-        max_start_step = len(self.df) - self.episode_horizon - 1
-        self.start_step = self.np_random.integers(0, max_start_step + 1) if max_start_step > 0 else 0
         self.current_step = self.start_step
 
         observation = self._get_obs()

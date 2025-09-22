@@ -137,3 +137,23 @@ data/*
 
 # Models and logs
 models/
+
+# Reports
+reports/tables/
+
+# LaTeX
+_minted-0000/
+trabajo-final/*.aux
+trabajo-final/*.bbl
+trabajo-final/*.blg
+trabajo-final/*.fdb_latexmk
+trabajo-final/*.fls
+trabajo-final/*.lof
+trabajo-final/*.log
+trabajo-final/*.lot
+trabajo-final/*.out
+trabajo-final/*.pdf
+trabajo-final/*.pyg
+trabajo-final/*.synctex.gz
+trabajo-final/*.toc
+trabajo-final/_minted-0000/
