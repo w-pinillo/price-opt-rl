@@ -58,6 +58,13 @@
 
 **Next Steps:** All primary project objectives have been met. The next logical step is to integrate these findings and methodologies into the final thesis document.
 
+## Objective 5 — Master's Thesis Redaction
+
+**Status:** In Progress
+
+**Details:**
+- The master's thesis will be written in English.
+
 ## LaTeX Thesis Template Guide
 
 This section summarizes how to work with the LaTeX template located in the `trabajo-final/` directory.

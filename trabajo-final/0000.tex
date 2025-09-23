@@ -1,5 +1,4 @@
-% Esta es la Plantilla UNAL en LaTeX
-\documentclass[10pt,spanish,fleqn,openany,twoside,letterpaper]{book}
+\documentclass[10pt,english,fleqn,openany,twoside,letterpaper]{book}
 
 %Muestra los márgenes del documento para evitar Warnings
 %Para activar la siguiente línea quite el simbolo % 
@@ -41,7 +40,7 @@
 
 %Idioma del documento
 %Use main para el idioma principal del documento
-\usepackage[main=spanish,english]{babel}
+\usepackage[main=english,spanish]{babel}
 
 % Carácteres especiales
 \usepackage{fontenc}
@@ -85,10 +84,9 @@
 \newcommand{\codirector}{} %Usar solo si se requiere
 \newcommand{\codirectortitle}{} %Usar solo si se requiere
 \newcommand{\issuedate}{}
-\newcommand{\palabrasclave}{}
+
 \newcommand{\keywords}{}
-\newcommand{\schlusselworter}{}
-\newcommand{\palavraschave}{}
+
 \newcommand{\sede}{}
 \newcommand{\department}{}
 \newcommand{\departmenttwo}{} %Usar solo si se requiere
@@ -120,8 +118,6 @@ Profundo}
 
 %Palabras clave del documento - Tener presente los Theasurus https://www.thesaurus.com/
 %Disponible en 3 idiomas aunque se puede extender a francés o otro idioma
-\renewcommand{\palabrasclave}{Use palabras clave que estén en Theasaurus} 
-\renewcommand{\keywords}{Use keywords available in Theasaurus}
 %\renewcommand{\schlusselworter}{}
 %\renewcommand{\palavraschave}{}
 
@@ -133,7 +129,7 @@ Profundo}
 \oddsidemargin0.5cm \evensidemargin-0.5cm%
 \fancypagestyle{plain}{
 \fancyhead[RO,LE]{}
-\fancyhead[RE,LO]{\small \textbf{\thesisname}}
+\fancyhead[RE,LO]{\small \textbf{\thesisnameeng}}
 \fancyfoot[CO,CE]{\thepage}
 }
 \pagestyle{fancy}
@@ -243,16 +239,16 @@ myedge/.style={->, -{Latex[#1]}}
 
 %Nombres y formatos de títulos, tablas y figuras
 %Use \sffamily para dejar con letra Sans Serif, sin etiqueta queda LaTeX clásico
-\renewcommand{\listfigurename}{\sffamily Lista de figuras}
-\renewcommand{\listtablename}{\sffamily Lista de tablas}
-\renewcommand{\contentsname}{\sffamily Contenido}
-\renewcommand{\chaptername}{\sffamily Capítulo}
-\renewcommand{\tablename}{\scriptsize \centering \textbf{Tabla}}
-\renewcommand{\figurename}{\scriptsize \centering \textbf{Figura}}
-\renewcommand{\appendixname}{\sffamily Anexo}
+\renewcommand{\listfigurename}{\sffamily List of Figures}
+\renewcommand{\listtablename}{\sffamily List of Tables}
+\renewcommand{\contentsname}{\sffamily Contents}
+\renewcommand{\chaptername}{\sffamily Chapter}
+\renewcommand{\tablename}{\scriptsize \centering \textbf{Table}}
+\renewcommand{\figurename}{\scriptsize \centering \textbf{Figure}}
+\renewcommand{\appendixname}{\sffamily Appendix}
 
 %Cambia el nombre de la sección de referencias
-\renewcommand{\bibname}{\sffamily Referencias Bibliográficas}
+\renewcommand{\bibname}{\sffamily References}
 
 %Páginas de Presentación del documento - No modificar esto se hace automáticamente
 {\newpage
@@ -278,7 +274,7 @@ myedge/.style={->, -{Latex[#1]}}
 \vspace{2.0cm}
 \textbf{\Large \studentname} \\
 \vspace{2.0cm}
-\small Trabajo final presentado como requisito parcial para optar por el título de: \\
+\small Final project presented as a partial requirement to apply for the title of: \\
 {\bfseries \academictitle}\\
 \vspace{2.0cm}
 \textbf{Director:} \\
@@ -287,15 +283,15 @@ myedge/.style={->, -{Latex[#1]}}
 \faculty \\
 \university \\ 
 \vspace{0.5cm}
-\textbf{Codirector(a):} \\
-\codirector \\
-\codirectortitle \; - \department \\
-\faculty \\
-\university 
-\vspace{1.5cm} \\
-\textbf{Línea de investigación:} \\ 
+%\textbf{Co-director:} \\
+%\codirector \\
+%\codirectortitle \; - \department \\
+%\faculty \\
+%\university 
+%\vspace{1.5cm} \\
+\textbf{Research line:} \\ 
 \researchtopic\\
-\textbf{Grupo de investigación:} \\
+\textbf{Research group:} \\
 \resgroupone \\
 \resgrouptwo \\
 \vspace{1.5cm} 
@@ -326,11 +322,12 @@ Albert Einstein
 \end{minipage}
 \end{flushright} 
 
+
 % Declaracíon de originalidad del texto y del contenido
 % No modificar, se hace automáticamente con los comandos ya definidos
 \newpage
-\chapter*{\sffamily Declaración}
-\par Me permito afirmar que he realizado ésta tesis de manera autónoma y con la única ayuda de los medios permitidos y no diferentes a los mencionados el presente texto. Todos los pasajes que se han tomado de manera textual o figurativa de textos publicados y no publicados, los he reconocido en el presente trabajo. Ninguna parte del presente trabajo se ha empleado en ningún otro tipo de tesis. 
+\chapter*{\sffamily Declaration}
+\par I hereby declare that I have prepared this thesis independently, and that I have not used any sources or aids other than those specified. All passages taken literally or in spirit from published or unpublished texts have been identified as such. No part of this work has been used in any other thesis.
 \\[1em]
 \sede., \submissiondate
 \\[6em]
@@ -341,18 +338,18 @@ Albert Einstein
 %Páginas preámbulo, listado de figuras, tablas y tabla de contenido
 {\pagestyle{plain} \pagenumbering{roman}
 \setlength{\parskip}{1mm}
-\include{00Agradecimientos}
+\include{00Acknowledgments}
 % Comentar las dos lineas de abajo con % en caso que no se requieran abreviaturas y resumen en el trabajo
-\include{00Abreviaturas}
-\include{00ResumenAbstract}
+\include{00Abbreviations}
+\include{00Abstract}
 % Dejar esta parte así para que genere correctamente la página de la tabla de contenido
-\addcontentsline{toc}{chapter}{Lista de figuras}
+\addcontentsline{toc}{chapter}{List of Figures}
 \listoffigures
 \clearpage
-\addcontentsline{toc}{chapter}{Lista de tablas}
+\addcontentsline{toc}{chapter}{List of Tables}
 \listoftables
 \clearpage
-\addcontentsline{toc}{chapter}{Contenido}
+\addcontentsline{toc}{chapter}{Contents}
 \tableofcontents
 \clearpage
 }
@@ -361,25 +358,24 @@ Albert Einstein
 \setlength{\parskip}{\baselineskip}
 %Incluir secciones del documento de aqui en adelante
 %Use \include para incluir desde una página nueva e \input para incluir sin salto de página
-\include{00Intrucciones} % Anular esta linea con comentario de ser necesario
-\include{00HipotesisPlanteamiento}
-\include{00Objetivos}
-\include{01Seccion01}
-\include{02Seccion02}
-\include{03Seccion03}
-\include{04Seccion04}
-\include{05Seccion05}
-\include{06Seccion06}
-\include{07Seccion07}
+\include{00Hypothesis}
+\include{00Objectives}
+\include{01Section01}
+\include{02Section02}
+\include{03Section03}
+\include{04Section04}
+\include{05Section05}
+\include{06Section06}
+\include{07Section07}
 
 %Inicio del apéndice o anexos
 \begin{appendix}
-\include{08Apendice01}%
+\include{08Appendix01}%
 \end{appendix}
 
 %Permite visualizar la bibliografía en la tabla de contenido
 %Cambie el nombre a Bibliografía o Literatura Citada en la siguiente línea de ser preciso
-\addcontentsline{toc}{chapter}{Referencias Bibliográficas} 
+\addcontentsline{toc}{chapter}{References} 
 
 \let\OLDthebibliography=\thebibliography
 \def\thebibliography#1{\OLDthebibliography{#1}}
