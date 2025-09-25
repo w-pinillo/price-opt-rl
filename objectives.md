@@ -79,7 +79,7 @@ Formalize state, action, and reward; implement an OpenAI Gym compatible environm
 ### Design decisions to make first
 
 *   **Action type**: discrete (e.g., set of percent changes) or continuous (price multiplier). Decide and document in `config.yaml`.
-*   **Reward formulation**: revenue, profit, or revenue minus volatility penalty. Decide business objective (e.g., maximize revenue or maximize profit).
+*   **Reward formulation**: revenue or profit. A reward shaping ablation (e.g., `revenue - λ·volatility`) can be tested. Decide primary business objective.
 *   **Demand simulator approach**: parametric log-linear elasticity model (recommended for prototyping) or learned demand model (XGBoost/LightGBM) trained on historical data.
 
 ### Steps to implement (in Python)
@@ -164,49 +164,69 @@ Implement end-to-end training scripts to train DQN (for discrete actions) and PP
 ## Objective 4 — Evaluation and comparison
 
 ### Goal
-Compare trained agents against historical pricing and simple baselines, compute business metrics, run statistical tests and produce visualizations and a written report.
+Compare trained agents against a comprehensive suite of baselines (from simple heuristics to strong model-based policies), compute business and operational metrics, run robustness checks, and produce a full analysis report.
 
 ### Steps to implement (in Python)
 
-*   Implement evaluation backtest script (`src/evaluation.py`) that:
-    *   Loads trained model and test split.
-    *   Runs the model over the test period and collects daily series: `date`, `price`, `units`, `revenue`, `action` taken.
-    *   Runs the baseline(s) over the same period: historical prices and a rule-based pricing (e.g., fixed markup or ±5% heuristic).
-*   **Compute metrics**:
-    *   Total revenue, average daily revenue, total units sold, average price, price volatility (std of daily price), profit (if costs known), percent of days price changed.
-*   **Statistical comparison**:
-    *   Paired bootstrap to obtain 95% confidence intervals for the difference in total revenue between agent and baseline.
-    *   Optionally use paired Wilcoxon test if distributional assumptions fail.
-*   **Robustness and sensitivity**:
-    *   Vary simulator elasticity parameter (`beta_price`) by ±20% and re-evaluate to measure sensitivity of agent performance (robustness analysis).
-    *   Cold-start test: evaluate agent on products with limited history and compare to baseline.
-*   **Visualization outputs**:
-    *   Time series plots: price vs units vs revenue for agent vs baseline.
-    *   Heatmap of revenue improvement per product and per month.
-    *   Training learning curves: average reward per episode during training.
-*   **Reporting**:
-    *   Create a evaluation notebook that exports:
-        *   Summary table of metrics comparing DQN, PPO and baselines.
-        *   Confidence intervals or p-values and interpretation.
-        *   Figures saved to `reports/figures/`.
-    *   Write a short section of the thesis that summarizes evaluation methodology and results.
+*   **Train demand model for baselines**
+    *   Train a demand prediction model (e.g., XGBoost) on the historical training data (`train_scaled.parquet`).
+    *   Crucially, this model must not have any privileged access to the simulator's internal parameters to ensure a fair comparison.
+*   **Implement evaluation backtest script (`src/evaluation.py`)** that:
+    *   Loads the trained DRL agents (DQN, PPO) and the test split.
+    *   Runs the agents over the test period and collects daily results.
+    *   Runs the full suite of baselines over the same period:
+        *   **Historical Policy:** Replay the actual historical prices.
+        *   **Rule-Based Policy:** A simple business heuristic (e.g., `price = median_historical_price`).
+        *   **Greedy Model-Based Policy:** At each step, use the demand model to choose the price that maximizes immediate expected revenue.
+        *   **Model-Based Planning (MPC):** At each step, use the demand model to simulate outcomes over a short future horizon (e.g., 7 days) and select the price that maximizes cumulative revenue over that horizon.
+
+### Compute metrics
+
+*   **Business KPIs:** Total Revenue, Average Daily Revenue, Total Units Sold.
+*   **Operational KPIs:** Average Price, Price Volatility (std. dev. of prices), Number of Price Changes.
+
+### Statistical comparison
+
+*   Use bootstrapping to obtain 95% confidence intervals for key performance metrics (e.g., total revenue) and for the performance difference between policies.
+
+### Robustness and Sensitivity Analysis
+
+*   **Simulator Misspecification:** Create alternate versions of the simulation environment where the demand elasticity parameter is perturbed (e.g., ±20%). Evaluate all policies (agents and baselines) in these environments to measure their robustness.
+*   **Reward Shaping Ablation:** Compare the performance of agents trained with the pure revenue reward vs. agents trained with a reward function that penalizes price volatility (e.g., `revenue - λ * price_change^2`).
+
+### Visualization outputs
+
+*   Time series plots: price vs units vs revenue for agent vs. best baseline.
+*   Bar charts comparing all policies on key metrics (e.g., Total Revenue, Price Volatility) with 95% CIs.
+*   Robustness plots showing performance degradation under simulator misspecification.
+*   Training learning curves for DRL agents.
+
+### Reporting
+
+*   Create an evaluation notebook that exports:
+    *   A summary table of all metrics comparing all policies.
+    *   Confidence intervals and interpretation of results.
+    *   Figures saved to `reports/figures/`.
+*   Write a thesis section summarizing the evaluation methodology and results.
 
 ### Files / functions to create
 
-*   `src/evaluation.py`: `evaluate_policy(model, env, n_episodes)`, `backtest_model_on_dataframe(model, df_test)`
+*   `src/evaluation.py`: `evaluate_policy(...)`, `backtest_model(...)`
+*   `src/baselines.py`: Implementations for Historical, Rule-based, Greedy, and MPC policies.
 *   `reports/evaluation_notebook.ipynb` (deliverable)
 *   `reports/tables/metrics_summary.csv`
 
 ### Tests / checks
 
-*   Backtest dataset alignment: ensure the model's predicted daily results align with dates in test set.
-*   Bootstrap script returns stable CI with sufficient bootstrap iterations (e.g., 1000).
+*   Backtest dataset alignment: ensure all policies' predicted daily results align with dates in the test set.
+*   Bootstrap script returns stable CIs with sufficient iterations (e.g., 1000).
+*   Ensure the demand model for baselines is trained without data leakage from the validation/test sets or the simulator's true parameters.
 
 ### Acceptance criteria
 
-*   `reports/metrics_summary.csv` with baseline vs model metrics exists.
-*   Statistical test shows whether difference is significant or not (report includes interpretation).
-*   Visual artifacts (plots) saved under `reports/figures`.
+*   `reports/tables/metrics_summary.csv` with metrics for all agents and baselines exists.
+*   The evaluation notebook contains a comprehensive analysis, including robustness checks.
+*   Visual artifacts (plots) are saved under `reports/figures`.
 
 ## Cross-cutting tasks (reproducibility, documentation, deliverables)
 
