@@ -43,20 +43,23 @@
 
 ## Objective 4 — Evaluation and comparison
 
-**Status:** Completed
+**Status:** In Progress
 
 **Details:**
-- An evaluation script, `src/evaluation.py`, was created to perform a backtest of the trained agents against a "do-nothing" baseline across all 100 top-selling products.
-- The script calculates key performance metrics including total revenue, average daily revenue, average price, and price volatility for each agent and product.
-- The detailed results are saved to `reports/tables/metrics_summary.csv`.
-- A new Jupyter Notebook, `notebooks/02-Evaluation.ipynb`, has been created to analyze and visualize the results.
-- The notebook includes a summary table of aggregated metrics, a bar chart comparing total revenues, and a bootstrapping analysis to confirm the statistical significance of the agents' performance uplift over the baseline.
-- Both DQN and PPO agents demonstrated a significant, multi-fold increase in total revenue compared to the baseline, with PPO performing slightly better.
+- The initial evaluation plan has been expanded into a more robust and comprehensive framework as defined in `objectives.md`.
+- The plan now includes comparing the DRL agents against a wider suite of baselines:
+    - **Historical Policy:** Replays historical prices.
+    - **Rule-Based Policy:** A median-based pricing strategy.
+    - **Greedy Model-Based:** A myopic policy using a trained demand model.
+    - **Model-Based Planning (MPC):** A stronger, forward-looking baseline.
+- The evaluation will include robustness checks by testing all policies in simulators with perturbed demand elasticity (±20%).
+- Fairness will be strictly enforced by ensuring model-based baselines are trained only on historical data, with no leakage from the simulator's ground truth.
+- Key performance metrics will include a balanced scorecard of business (Revenue, Units Sold) and operational (Price Volatility) KPIs, with 95% confidence intervals calculated via bootstrapping.
 
 **Optimality Assessment:**
-- The evaluation pipeline is complete, providing a robust and statistically validated comparison of the trained agents against a baseline. The results are clearly documented and visualized, fulfilling the requirements of Objective 4.
+- The evaluation plan has been significantly enhanced to provide a rigorous, thesis-ready comparison of the DRL agents. It is designed to isolate the value added by the agents and test their robustness. Implementation of this new plan is the next step.
 
-**Next Steps:** All primary project objectives have been met. The next logical step is to integrate these findings and methodologies into the final thesis document.
+**Next Steps:** Implement the enhanced evaluation framework. This involves creating the new baseline policies (`src/baselines.py`) and updating the evaluation script (`src/evaluation.py`) and notebook (`notebooks/02-Evaluation.ipynb`) to reflect the new experiments and metrics.
 
 ## Objective 5 — Master's Thesis Redaction
 
