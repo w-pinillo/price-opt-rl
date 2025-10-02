@@ -136,10 +136,11 @@ cython_debug/
 data/*
 
 # Models and logs
-models/
+/models/
 
 # Reports
 reports/tables/
+reports/figures/
 
 # LaTeX
 _minted-0000/

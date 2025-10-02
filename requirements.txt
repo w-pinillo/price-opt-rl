@@ -12,3 +12,4 @@ stable-baselines3
 torch
 tensorboard
 tqdm
+lightgbm
