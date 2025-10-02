@@ -18,17 +18,22 @@
 
 ## Objective 2 — Define the MDP and implement the simulation environment
 
-**Status:** Completed
+**Status:** In Progress
 
 **Details:**
-- Design decisions for action type (discrete), reward formulation (revenue), and demand simulator (parametric log-linear elasticity model) have been made and configured in `config.yaml`.
-- The OpenAI Gym compatible environment `src/envs/price_env.py` has been implemented, including `reset`, `step`, `render`, and `seed` methods.
-- The `src/envs/simulators.py` file contains the `ParametricDemandSimulator` class.
-- The environment successfully runs a full episode with a random policy without NaNs or unexpected negative rewards.
-- A sanity check confirmed that increasing price tends to reduce predicted demand, validating the demand simulator.
+- The initial `ParametricDemandSimulator` is complete.
+- To create a higher-fidelity environment, a new ML-based simulator has been developed:
+    - A LightGBM model was trained to predict demand (`src/models/train_demand_model.py`).
+    - The model shows excellent performance on the validation set (R² > 0.99).
+    - A new `MLDemandSimulator` class was added to `src/envs/simulators.py`.
+
+**Next Steps:**
+- Integrate the new `MLDemandSimulator` into the main `PriceEnv`.
+- Refactor `config.yaml` to allow for dynamic selection between `parametric` and `ml` simulators.
+- Update the `PriceEnv` `step` method to construct the feature vector required by the ML model.
 
 **Optimality Assessment:**
-- The simulation environment is now functional and meets the requirements of Objective 2. It provides a stable and configurable platform for training DRL agents.
+- The simulation environment is being upgraded to a more realistic, data-driven model, which will allow for the training of more robust and effective DRL agents.
 
 ## Objective 3 — Implement and train DRL agents (DQN and PPO)
 

@@ -1,4 +1,6 @@
 import numpy as np
+import joblib
+import os
 
 class ParametricDemandSimulator:
     """
@@ -31,3 +33,27 @@ class ParametricDemandSimulator:
         # Ensure demand is non-negative
         return max(0, demand)
 
+class MLDemandSimulator:
+    """
+    Simulates demand using a pre-trained machine learning model.
+    """
+    def __init__(self, model_path: str):
+        print(f"Loading demand model from {model_path}...")
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Demand model not found at {model_path}")
+        self.model = joblib.load(model_path)
+        print("Demand model loaded successfully.")
+
+    def simulate_demand(self, features: np.ndarray) -> float:
+        """
+        Simulates the units sold given a feature vector.
+        """
+        # The ML model expects a 2D array for prediction
+        if features.ndim == 1:
+            features = features.reshape(1, -1)
+            
+        # Predict demand
+        predicted_demand = self.model.predict(features)[0]
+
+        # Ensure demand is non-negative
+        return max(0, predicted_demand)

@@ -80,7 +80,7 @@ Formalize state, action, and reward; implement an OpenAI Gym compatible environm
 
 *   **Action type**: discrete (e.g., set of percent changes) or continuous (price multiplier). Decide and document in `config.yaml`.
 *   **Reward formulation**: revenue or profit. A reward shaping ablation (e.g., `revenue - λ·volatility`) can be tested. Decide primary business objective.
-*   **Demand simulator approach**: parametric log-linear elasticity model (recommended for prototyping) or learned demand model (XGBoost/LightGBM) trained on historical data.
+*   **Demand simulator approach**: parametric log-linear elasticity model (recommended for prototyping) or learned demand model (XGBoost/LightGBM) trained on historical data. We will proceed with implementing the learned demand model approach using LightGBM for a higher-fidelity simulation.
 
 ### Steps to implement (in Python)
 
