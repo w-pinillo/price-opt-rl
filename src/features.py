@@ -1,6 +1,7 @@
 import polars as pl
 import json
 import os
+import numpy as np
 from src.etl import save_product_ids
 
 def select_top_products(lazy_df: pl.LazyFrame, n: int = 100, output_path: str = "data/processed") -> list:
@@ -74,27 +75,40 @@ def generate_time_series_features(df: pl.DataFrame) -> pl.DataFrame:
     """
     Generates time-series features for the daily aggregated product data.
     """
-    df_with_features = df.with_columns([
+    df_with_base_features = df.with_columns([
         # Time-based features
         pl.col("SHOP_DATE").dt.weekday().alias("day_of_week"),
         pl.col("SHOP_DATE").dt.month().alias("month"),
         pl.col("SHOP_DATE").dt.year().alias("year"),
         pl.col("SHOP_DATE").dt.day().alias("day"),
         (pl.col("SHOP_DATE").dt.weekday().is_in([6, 7])).alias("is_weekend"),
-        
+    ])
+
+    df_with_all_features = df_with_base_features.with_columns([
+        # Seasonality features
+        (2 * np.pi * pl.col("day_of_week") / 7).sin().alias("day_of_week_sin"),
+        (2 * np.pi * pl.col("day_of_week") / 7).cos().alias("day_of_week_cos"),
+        (2 * np.pi * pl.col("month") / 12).sin().alias("month_sin"),
+        (2 * np.pi * pl.col("month") / 12).cos().alias("month_cos"),
+
         # Lag features for total_units
         pl.col("total_units").shift(1).over("PROD_CODE").alias("lag_1_units"),
         pl.col("total_units").shift(7).over("PROD_CODE").alias("lag_7_units"),
-        pl.col("total_units").shift(30).over("PROD_CODE").alias("lag_30_units"),
+        pl.col("total_units").shift(14).over("PROD_CODE").alias("lag_14_units"),
+        pl.col("total_units").shift(28).over("PROD_CODE").alias("lag_28_units"),
         
         # Rolling mean features for total_units
         pl.col("total_units").rolling_mean(window_size=7).over("PROD_CODE").alias("rolling_mean_7_units"),
-        pl.col("total_units").rolling_mean(window_size=30).over("PROD_CODE").alias("rolling_mean_30_units"),
+        pl.col("total_units").rolling_mean(window_size=28).over("PROD_CODE").alias("rolling_mean_28_units"),
+
+        # Rolling std dev features for total_units
+        pl.col("total_units").rolling_std(window_size=7).over("PROD_CODE").alias("rolling_std_7_units"),
+        pl.col("total_units").rolling_std(window_size=28).over("PROD_CODE").alias("rolling_std_28_units"),
         
         # Price change percentage
         (pl.col("avg_price") / pl.col("avg_price").shift(1).over("PROD_CODE") - 1).alias("price_change_pct"),
     ])
-    return df_with_features
+    return df_with_all_features
 
 def temporal_split(df: pl.DataFrame, train_end_date: str, val_end_date: str) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """

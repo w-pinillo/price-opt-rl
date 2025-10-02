@@ -42,7 +42,7 @@ Build a dataset with 3 years of daily data for the top-100 products and produce 
     *   Implement a function that groups transactions to daily level per product and produces columns: `date`, `prod_id`, `price` (average/median), `units`, `revenue`, `category`, `competitor_price` (if available), `promo` flag (if available).
     *   Save `data/processed/top100_daily.csv`.
 *   **Generate time series features**
-    *   For each product, compute lag features (lag 1, lag 7, lag 30), rolling means (7, 30), price change percentage, day-of-week and month features, weekend flag, and holiday flag if holiday calendar available.
+    *   For each product, compute lag features (lags 1, 7, 14, 28), rolling means and standard deviations (windows 7, 28), price change percentage, and handle seasonality with sin/cos transformations for day-of-week and month features.
     *   Optionally compute a rolling local elasticity estimate (log-log regression over a sliding window).
     *   Save resulting feature dataset and list of feature column names for the environment.
 *   **Scale numeric features**

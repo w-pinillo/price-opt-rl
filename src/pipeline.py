@@ -38,8 +38,10 @@ def run_data_pipeline(raw_data_path: str, processed_data_dir: str, scalers_dir: 
     # Define feature columns for scaling
     feature_cols = [
         "avg_price", "total_units", "total_sales",
-        "lag_1_units", "lag_7_units", "lag_30_units",
-        "rolling_mean_7_units", "rolling_mean_30_units",
+        "day_of_week_sin", "day_of_week_cos", "month_sin", "month_cos",
+        "lag_1_units", "lag_7_units", "lag_14_units", "lag_28_units",
+        "rolling_mean_7_units", "rolling_mean_28_units",
+        "rolling_std_7_units", "rolling_std_28_units",
         "price_change_pct"
     ]
 

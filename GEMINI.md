@@ -5,13 +5,16 @@
 **Status:** Completed
 
 **Details:**
-- Raw data loading, initial cleaning, top-100 product selection, daily aggregation, and time series feature generation have been successfully implemented and integrated into the `src/pipeline.py`.
-- The processed data is saved to `data/processed/top100_daily.parquet` and the list of top product IDs to `data/processed/top100_ids.json`.
-- Numeric features have been scaled using `StandardScaler` and saved to `models/scalers/`.
-- The data has been temporally split into train, validation, and test sets, and saved as `train_scaled.parquet`, `val_scaled.parquet`, and `test_scaled.parquet` respectively in `data/processed/`.
+- The data preparation pipeline has been successfully executed.
+- The final feature set includes:
+    - **Lags:** Demand lags for 1, 7, 14, and 28 days.
+    - **Rolling Stats:** 7 and 28-day rolling means and standard deviations for demand.
+    - **Seasonality:** Cyclical `sin/cos` features for `day_of_week` and `month`.
+- Processed, scaled, and split datasets (`train`, `val`, `test`) have been saved to `data/processed/`.
+- The corresponding feature scalers have been saved to `models/scalers/`.
 
 **Optimality Assessment:**
-- The data preparation pipeline is now fully implemented as per the requirements of Objective 1. It is modular, reproducible, and handles large datasets efficiently using Polars. The temporal split ensures proper evaluation for time-series data, and feature scaling prepares the data for DRL agents.
+- The data preparation pipeline is modular, reproducible, and now includes a more robust feature set to better capture demand dynamics and seasonality, providing a solid foundation for training the DRL agents.
 
 ## Objective 2 — Define the MDP and implement the simulation environment
 
