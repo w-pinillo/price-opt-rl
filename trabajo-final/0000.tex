@@ -34,9 +34,9 @@
 
 %Usando el paquete Natbib
 %Cita normal \cite[página]{} y cita con paréntesis \citep[página]{}
-\usepackage{natbib}
+\usepackage[numbers]{natbib}
 \bibpunct{[}{]}{;}{\&}{.}{}
-\bibliographystyle{dtvstyle}
+\bibliographystyle{unsrt}
 
 %Idioma del documento
 %Use main para el idioma principal del documento
@@ -381,7 +381,7 @@ Albert Einstein
 {\scriptsize
 \pagestyle{plain}
 % Nombre del documento donde se almacenan las referencias
-\bibliography{Referencias}
+\bibliography{References}
 \nocite{*}
 % Inserta un página adicional al final en blanco 
 %\cleardoublepage
