@@ -1,5 +1,27 @@
 \chapter{Materials and Methods}
 
+% TEMPORARY NOTE: Summary of the data preparation pipeline (Objective 1).
+% This section will be expanded and integrated into the main text later.
+
+\subsection*{Data Preparation Pipeline}
+
+The initial phase of the project involved transforming raw transactional data into a structured, feature-rich dataset suitable for training reinforcement learning agents. This process was executed through a sequential pipeline, ensuring reproducibility and modularity. The key steps are summarized below:
+
+\begin{itemize}
+    \item \textbf{Consolidation and Filtering:} The process began by consolidating all raw transaction files into a single dataset. From this, the top 100 products, ranked by total units sold, were selected for the study. The data was then aggregated to a daily level for each product, creating a consistent time-series format.
+
+    \item \textbf{Feature Engineering:} To provide the agent with a comprehensive view of the market dynamics, a rich set of features was engineered:
+    \begin{itemize}
+        \item \textbf{Demand Lags:} Lagged demand features for 1, 7, 14, and 28 days were created to capture short-term and weekly demand patterns.
+        \item \textbf{Rolling Statistics:} To model recent trends and volatility, 7-day and 28-day rolling means and standard deviations of demand were calculated.
+        \item \textbf{Seasonality:} Cyclical features using sine and cosine transformations were generated for both the day of the week and the month of the year to effectively model periodic patterns in demand.
+    \end{itemize}
+
+    \item \textbf{Data Splitting and Scaling:} The dataset was split chronologically into training, validation, and test sets to ensure that the model is evaluated on future, unseen data, preventing any lookahead bias. All numeric features in the training set were standardized using a \texttt{StandardScaler}, which was then saved and applied consistently across the validation and test sets.
+\end{itemize}
+
+The output of this pipeline was a set of processed, scaled datasets (`train`, `val`, `test`) and the corresponding feature scaler, providing a solid foundation for the subsequent stages of model training and evaluation.
+
 % TEMPORARY NOTE: Explanation of DQNPolicy
 % This section will be expanded later.
 
