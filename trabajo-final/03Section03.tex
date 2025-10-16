@@ -1,1 +1,54 @@
 \chapter{Materials and Methods}
+
+% TEMPORARY NOTE: Explanation of DQNPolicy
+% This section will be expanded later.
+
+\subsection*{Technical Note: DQNPolicy Implementation in Stable-Baselines3}
+
+The \texttt{DQNPolicy} class is central to the agent's learning process. It manages the neural networks that approximate the Q-function, which estimates the value of taking an action in a given state. Its operation can be summarized in a few key points:
+
+\begin{itemize}
+    \item \textbf{Two-Network Architecture:} The policy initializes two identical neural networks:
+    \begin{itemize}
+        \item \textbf{Online Network (\texttt{q\_net}):} This network is used for action selection during interaction with the environment. Its weights are continuously updated during training.
+        \item \textbf{Target Network (\texttt{q\_net\_target}):} This is a periodically updated, frozen copy of the online network. It is used to provide a stable target for the learning updates, which is a crucial technique to prevent oscillations and stabilize the training process.
+    \end{itemize}
+
+    \item \textbf{Action Selection:} To choose an action, the current state is fed into the online network, which outputs a Q-value for every possible action. The policy then selects the action with the highest Q-value (a greedy policy).
+
+    \item \textbf{Learning Process:} The learning occurs by sampling a batch of experiences from a replay buffer. The online network's weights are updated to minimize the loss between its predicted Q-values and the target Q-values calculated using the target network. Specifically, the target is computed as:
+    \[ y = r + \gamma \max_{a'} Q_{\text{target}}(s', a') \]
+    The loss is then typically the Mean Squared Error between this target $y$ and the prediction from the online network, $Q_{\text{online}}(s, a)$.
+\end{itemize}
+
+% TEMPORARY NOTE: Explanation of PPO
+% This section will be expanded later.
+
+\subsection*{Technical Note: PPO Implementation in Stable-Baselines3}
+
+Proximal Policy Optimization (PPO) is an \textbf{Actor-Critic} algorithm that has become a go-to choice for many reinforcement learning problems due to its reliable performance and ease of implementation. Unlike value-based methods like DQN, PPO learns a policy directly.
+
+Its operation can be summarized as follows:
+
+\begin{itemize}
+    \item \textbf{Actor-Critic Architecture:} PPO uses two distinct neural networks:
+    \begin{itemize}
+        \item \textbf{The Actor:} This network represents the policy. It takes the current state as input and outputs a probability distribution over the possible actions. It is responsible for deciding which action to take.
+        \item \textbf{The Critic:} This network estimates the state-value function, $V(s)$. Its job is not to choose actions, but to evaluate how good a state is, which in turn helps the Actor learn more efficiently by providing a low-variance estimate of performance.
+    \end{itemize}
+
+    \item \textbf{The PPO Objective Function:} The core innovation of PPO is its objective function, which prevents the policy from changing too drastically at each update step. This is achieved with a "clipped surrogate objective".
+    \begin{enumerate}
+        \item It calculates the probability ratio between the new policy and the old policy: $r_t = \pi_{\text{new}}(a|s) / \pi_{\text{old}}(a|s)$.
+        \item It uses the Critic to compute an \textbf{Advantage} value ($\hat{A}_t$), which represents how much better an action was than the average action in that state.
+        \item The policy update is then "clipped" to keep the new policy close to the old one, avoiding destructive updates. The simplified objective is:
+        \[ L_{\text{CLIP}} = \mathbb{E} \left[ \min \left( r_t \hat{A}_t, \text{clip}(r_t, 1-\epsilon, 1+\epsilon) \hat{A}_t \right) \right] \]
+    \end{enumerate}
+
+    \item \textbf{Learning Process:} PPO's training loop is different from DQN's.
+    \begin{itemize}
+        \item The Actor interacts with the environment for a set number of steps to collect a batch of experiences.
+        \item Using this batch, the Critic helps compute the advantage for each step.
+        \item The algorithm then performs multiple epochs of gradient ascent on the collected data, updating both the Actor (using the clipped objective) and the Critic (by minimizing the error in its value predictions). This ability to reuse experience for multiple updates makes it more data-efficient than simpler policy gradient methods.
+    \end{itemize}
+\end{itemize}
