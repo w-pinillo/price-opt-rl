@@ -20,7 +20,7 @@ class PriceEnv(gym.Env):
     """
     metadata = {"render_modes": ["human"], "render_fps": 30}
 
-    def __init__(self, data: pl.DataFrame, config: dict, avg_price_scaler: StandardScaler, render_mode=None):
+    def __init__(self, data: pl.DataFrame, config: dict, avg_price_scaler: StandardScaler, prod_category_cols: list, render_mode=None):
         super().__init__()
 
         self.df = data
@@ -32,11 +32,13 @@ class PriceEnv(gym.Env):
 
         self.feature_cols = [
             "avg_price", "total_units", "total_sales",
-            "lag_1_units", "lag_7_units", "lag_30_units",
-            "rolling_mean_7_units", "rolling_mean_30_units",
-            "price_change_pct"
+            "lag_1_units", "lag_7_units", "lag_14_units", "lag_28_units",
+            "rolling_mean_7_units", "rolling_mean_28_units",
+            "rolling_std_7_units", "rolling_std_28_units",
+            "price_change_pct", "days_since_price_change", "price_position"
         ]
-        self.time_cols = ["day_of_week", "month", "year", "day", "is_weekend"]
+        self.feature_cols.extend(prod_category_cols)
+        self.time_cols = ["day_of_week", "month", "year", "day_of_month", "week_of_year", "is_weekend"]
         
         self.demand_simulator = ParametricDemandSimulator(
             **self.config['env']['parametric_simulator']

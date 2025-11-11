@@ -1,15 +1,26 @@
 import yaml
 import os
 import polars as pl
-from stable_baselines3 import PPO
+from stable_baselines3 import DQN, PPO, A2C
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.monitor import Monitor
+import importlib
 
 from src.utils import seed_everything, make_env
 
-def train_ppo():
+def get_agent_class(agent_name: str):
     """
-    Main function to train the PPO agent.
+    Dynamically imports and returns the agent class from stable-baselines3.
+    """
+    try:
+        module = importlib.import_module("stable_baselines3")
+        return getattr(module, agent_name)
+    except (ImportError, AttributeError):
+        raise ValueError(f"Agent '{agent_name}' not found in stable-baselines3.")
+
+def train_agent():
+    """
+    Main function to train a specified RL agent.
     """
     # --- 1. Load configuration and set seed ---
     with open("config.yaml", 'r') as f:
@@ -26,18 +37,19 @@ def train_ppo():
         return
 
     # --- 3. Create training and evaluation environments ---
-    PRODUCT_ID_TO_TRAIN = "PRD0904358" 
-    
-    print(f"Creating environment for product: {PRODUCT_ID_TO_TRAIN}")
-    env = make_env(data, config, PRODUCT_ID_TO_TRAIN)
+    product_id = config['training']['product_id']
+    print(f"Creating environment for product: {product_id}")
+    env = make_env(data, config, product_id)
     env = Monitor(env)
 
-    eval_env = make_env(data, config, PRODUCT_ID_TO_TRAIN)
+    eval_env = make_env(data, config, product_id)
     eval_env = Monitor(eval_env)
 
     # --- 4. Define Callbacks ---
-    model_dir = os.path.join(config['paths']['models_dir'], 'ppo')
+    agent_name = config['training']['agent_name']
+    model_dir = os.path.join(config['paths']['models_dir'], agent_name.lower())
     os.makedirs(model_dir, exist_ok=True)
+    
     eval_callback = EvalCallback(
         eval_env,
         best_model_save_path=os.path.join(model_dir, 'best_model'),
@@ -48,20 +60,17 @@ def train_ppo():
         render=False
     )
 
-    # --- 5. Instantiate and Train the PPO Model ---
-    print("Instantiating PPO model...")
-    model = PPO(
+    # --- 5. Instantiate and Train the Model ---
+    print(f"Instantiating {agent_name} model...")
+    agent_class = get_agent_class(agent_name)
+    agent_config = config['agents'][agent_name]
+
+    model = agent_class(
         "MlpPolicy",
         env,
-        learning_rate=config['ppo']['learning_rate'],
-        n_steps=config['ppo']['n_steps'],
-        batch_size=config['ppo']['batch_size'],
-        n_epochs=config['ppo']['n_epochs'],
-        gamma=config['ppo']['gamma'],
-        gae_lambda=config['ppo']['gae_lambda'],
-        policy_kwargs={"net_arch": config['ppo']['policy_architecture']},
         verbose=1,
-        tensorboard_log=os.path.join(model_dir, 'tensorboard_log')
+        tensorboard_log=os.path.join(model_dir, 'tensorboard_log'),
+        **agent_config
     )
 
     print("Starting model training...")
@@ -79,4 +88,4 @@ def train_ppo():
     print(f"Best performing model saved in: {os.path.join(model_dir, 'best_model')}")
 
 if __name__ == "__main__":
-    train_ppo()
+    train_agent()

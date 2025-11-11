@@ -86,11 +86,15 @@ def make_env(data: pl.DataFrame, config: dict, product_id: int):
     except FileNotFoundError:
         print(f"Error: Scaler file not found at {scaler_path}")
         raise
-        
+    
+    # Dynamically get PROD_CATEGORY columns
+    prod_category_cols = [col for col in product_data.columns if col.startswith("PROD_CATEGORY_")]
+
     # Create the environment
     env = PriceEnv(
         data=product_data,
         config=config,
-        avg_price_scaler=avg_price_scaler
+        avg_price_scaler=avg_price_scaler,
+        prod_category_cols=prod_category_cols
     )
     return env

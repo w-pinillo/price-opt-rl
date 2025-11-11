@@ -18,33 +18,38 @@ env:
     base_demand: 100.0 # Base demand when price is reference price
     ref_price: 1.0 # Reference price for elasticity calculation
 
-# Objective 3: DRL Agent Training Configuration (placeholders for now)
-
-dqn:
-  learning_rate: 0.0001
-  buffer_size: 100000
-  batch_size: 32
-  gamma: 0.99
-  target_update_interval: 1000
-  policy_architecture: [256, 256]
-
-ppo:
-  learning_rate: 0.0003
-  n_steps: 2048
-  batch_size: 64
-  n_epochs: 10
-  gamma: 0.99
-  gae_lambda: 0.95
-  policy_architecture: [256, 256]
-
-# Cross-cutting Configuration
+# Objective 3: DRL Agent Training Configuration
 
 training:
-  total_timesteps: 1000000
+  agent_name: "DQN" # Algorithm to use (e.g., "DQN", "PPO", "A2C")
+  total_timesteps: 100000
   eval_freq: 10000
   n_eval_episodes: 10
   seed: 42
+  product_id: "PRD0904358" # Product to train on
 
+# Algorithm-specific Hyperparameters
+agents:
+  DQN:
+    learning_rate: 0.0001
+    buffer_size: 100000
+    batch_size: 32
+    gamma: 0.99
+    target_update_interval: 1000
+    policy_kwargs:
+      net_arch: [256, 256]
+
+  PPO:
+    learning_rate: 0.0003
+    n_steps: 2048
+    batch_size: 64
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    policy_kwargs:
+      net_arch: [256, 256]
+
+# Cross-cutting Configuration
 paths:
   raw_data: data/transactions.parquet
   processed_data_dir: data/processed
@@ -54,5 +59,3 @@ paths:
   price_scaler: models/scalers/avg_price_standardscaler.joblib
   features_scaler: models/scalers/features_standardscaler.joblib # Assuming this exists
   top_100_ids: data/processed/top100_ids.json
-  dqn_model: models/dqn/best_model/best_model
-  ppo_model: models/ppo/best_model/best_model

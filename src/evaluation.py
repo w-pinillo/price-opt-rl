@@ -11,9 +11,20 @@ import polars as pl
 from stable_baselines3 import PPO, DQN
 from tqdm import tqdm
 import os
+import importlib
 
 from src.envs.price_env import PriceEnv
 from src.utils import make_env, seed_everything
+
+def get_agent_class(agent_name: str):
+    """
+    Dynamically imports and returns the agent class from stable-baselines3.
+    """
+    try:
+        module = importlib.import_module("stable_baselines3")
+        return getattr(module, agent_name)
+    except (ImportError, AttributeError):
+        raise ValueError(f"Agent '{agent_name}' not found in stable-baselines3.")
 
 def backtest_policy(model, env, avg_price_scaler):
     """
@@ -99,54 +110,52 @@ def main():
     # Seed for reproducibility
     seed_everything(config["training"]["seed"])
 
-    # Load data, scalers, and product IDs
+    # Load data and scalers
     test_df = pl.read_parquet(config["paths"]["test_data"])
     avg_price_scaler = joblib.load(config["paths"]["price_scaler"])
-    with open(config["paths"]["top_100_ids"], 'r') as f:
-        top_100_ids = json.load(f)
+    
+    product_id = config['training']['product_id']
+    agent_name = config['training']['agent_name']
+    agent_class = get_agent_class(agent_name)
 
     all_results = []
 
-    for product_id in tqdm(top_100_ids, desc="Evaluating Products"):
-        env = make_env(data=test_df, config=config, product_id=product_id)
-        
-        # Baseline
-        _, baseline_results_df = do_nothing_policy(env, avg_price_scaler)
-        baseline_metrics = calculate_metrics(baseline_results_df)
-        baseline_metrics['product_id'] = product_id
-        baseline_metrics['agent'] = 'baseline'
-        all_results.append(baseline_metrics)
+    print(f"--- Evaluating Product ID: {product_id} ---")
+    env = make_env(data=test_df, config=config, product_id=product_id)
+    
+    # Baseline
+    _, baseline_results_df = do_nothing_policy(env, avg_price_scaler)
+    baseline_metrics = calculate_metrics(baseline_results_df)
+    baseline_metrics['product_id'] = product_id
+    baseline_metrics['agent'] = 'baseline'
+    all_results.append(baseline_metrics)
 
-        # DQN
-        dqn_model = DQN.load(config["paths"]["dqn_model"], env=env)
-        _, dqn_results_df = backtest_policy(dqn_model, env, avg_price_scaler)
-        dqn_metrics = calculate_metrics(dqn_results_df)
-        dqn_metrics['product_id'] = product_id
-        dqn_metrics['agent'] = 'dqn'
-        all_results.append(dqn_metrics)
+    # Trained Agent
+    model_path = os.path.join(config['paths']['models_dir'], agent_name.lower(), 'best_model', 'best_model.zip')
+    if not os.path.exists(model_path):
+        print(f"Error: Model not found at {model_path}. Aborting.")
+        return
 
-        # PPO
-        ppo_model = PPO.load(config["paths"]["ppo_model"], env=env)
-        _, ppo_results_df = backtest_policy(ppo_model, env, avg_price_scaler)
-        ppo_metrics = calculate_metrics(ppo_results_df)
-        ppo_metrics['product_id'] = product_id
-        ppo_metrics['agent'] = 'ppo'
-        all_results.append(ppo_metrics)
+    model = agent_class.load(model_path, env=env)
+    _, agent_results_df = backtest_policy(model, env, avg_price_scaler)
+    agent_metrics = calculate_metrics(agent_results_df)
+    agent_metrics['product_id'] = product_id
+    agent_metrics['agent'] = agent_name.lower()
+    all_results.append(agent_metrics)
 
     # --- Save Results ---
     results_df = pd.DataFrame(all_results)
     output_path = "reports/tables"
     os.makedirs(output_path, exist_ok=True)
-    results_df.to_csv(os.path.join(output_path, "metrics_summary.csv"), index=False)
+    results_df.to_csv(os.path.join(output_path, f"metrics_{product_id}.csv"), index=False)
 
-    print(f"\nResults saved to {os.path.join(output_path, 'metrics_summary.csv')}")
+    print(f"\nResults saved to {os.path.join(output_path, f'metrics_{product_id}.csv')}")
 
     # --- Report Aggregated Results ---
-    agg_df = results_df.groupby('agent')['total_revenue'].sum().reset_index()
-    print("\n--- Aggregated Evaluation Results ---")
-    for _, row in agg_df.iterrows():
-        print(f"{row['agent']:<10} Total Revenue: ${row['total_revenue']:,.2f}")
-    print("-------------------------------------")
+    print("\n--- Evaluation Results ---")
+    for _, row in results_df.iterrows():
+        print(f"Agent: {row['agent']:<10} | Total Revenue: ${row['total_revenue']:>12,.2f} | Avg Price: ${row['avg_price']:.2f}")
+    print("--------------------------")
 
 if __name__ == "__main__":
     main()
