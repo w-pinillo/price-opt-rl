@@ -6,7 +6,7 @@ import random
 import numpy as np
 import torch
 import gymnasium as gym
-from src.envs.price_env import PriceEnv
+# from src.envs.price_env import PriceEnv # Removed to break circular dependency
 
 def fit_save_scalers(df: pl.DataFrame, feature_cols: list, output_path: str, scaler_type: str = "StandardScaler"):
     """
@@ -76,16 +76,11 @@ def make_env(data: pl.DataFrame, config: dict, product_id: int):
     """
     Creates, configures, and returns the pricing environment for a given product.
     """
+    # Import PriceEnv locally to avoid circular dependency
+    from src.envs.price_env import PriceEnv
+
     # Filter data for the specific product
     product_data = data.filter(pl.col("PROD_CODE") == product_id)
-    
-    # Load the specific scaler for avg_price
-    scaler_path = os.path.join(config['paths']['scalers_dir'], "avg_price_standardscaler.joblib")
-    try:
-        avg_price_scaler = joblib.load(scaler_path)
-    except FileNotFoundError:
-        print(f"Error: Scaler file not found at {scaler_path}")
-        raise
     
     # Dynamically get PROD_CATEGORY columns
     prod_category_cols = [col for col in product_data.columns if col.startswith("PROD_CATEGORY_")]
@@ -94,7 +89,6 @@ def make_env(data: pl.DataFrame, config: dict, product_id: int):
     env = PriceEnv(
         data=product_data,
         config=config,
-        avg_price_scaler=avg_price_scaler,
         prod_category_cols=prod_category_cols
     )
     return env

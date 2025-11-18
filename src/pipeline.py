@@ -35,27 +35,18 @@ def run_data_pipeline(raw_data_path: str, processed_data_dir: str, scalers_dir: 
     df_with_features = df_with_features.drop_nulls()
     print(f"Data after dropping NaNs: {df_with_features.shape}")
 
-    # One-hot encode PROD_CATEGORY
-    print("One-hot encoding PROD_CATEGORY...")
-    df_with_features = df_with_features.to_dummies(columns=["PROD_CATEGORY"])
-    print(f"Data shape after one-hot encoding: {df_with_features.shape}")
-
     # Define feature columns for scaling
     feature_cols = [
         "avg_price", "total_units", "total_sales",
-        "day_of_week_sin", "day_of_week_cos", "month_sin", "month_cos",
-        "lag_1_units", "lag_7_units", "lag_14_units", "lag_28_units",
-        "rolling_mean_7_units", "rolling_mean_28_units",
-        "rolling_std_7_units", "rolling_std_28_units",
+        "day_of_week_sin", "month_cos",
+        "lag_1_units", "lag_7_units",
+        "rolling_mean_28_units",
+        "rolling_std_7_units",
         "price_change_pct",
-        "day_of_month", "week_of_year", "is_weekend", # New temporal features
-        "days_since_price_change", "price_position", # New product features
+        "day_of_month", "week_of_year",
+        "price_position",
         "SHOP_WEEK"
     ]
-
-    # Dynamically add one-hot encoded PROD_CATEGORY columns
-    prod_category_cols = [col for col in df_with_features.columns if col.startswith("PROD_CATEGORY_")]
-    feature_cols.extend(prod_category_cols)
 
     # Define temporal split dates
     train_end_date = "2008-01-10"

@@ -2,10 +2,12 @@ import polars as pl
 import lightgbm as lgb
 import joblib
 import os
+import json # Import json
 
 def train_demand_model(data_path: str, model_output_path: str):
     """
-    Trains a LightGBM model to predict demand (total_units) and saves it.
+    Trains a LightGBM model to predict demand (total_units) and saves it,
+    along with the list of feature names.
     """
     print(f"Loading data from {data_path}...")
     train_df = pl.read_parquet(data_path)
@@ -13,13 +15,13 @@ def train_demand_model(data_path: str, model_output_path: str):
     # Define target and features
     target_col = "total_units"
     
-    # Exclude identifiers, the target itself, and other metrics that would leak information.
-    # Also excluding raw time features that are now represented by sin/cos transformations.
+    # Exclude only basic identifiers and target/leakage columns.
+    # The incoming data is assumed to be clean from the pipeline.
     feature_cols = [
         col for col in train_df.columns 
         if col not in [
-            "SHOP_DATE", "PROD_CODE", "total_units", "total_sales", 
-            "day_of_week", "month", "year", "day", "is_weekend"
+            "SHOP_DATE", "PROD_CODE", "total_units", "total_sales",
+            "day_of_week", "month", "year" # Remove intermediate date features
         ]
     ]
     
@@ -27,6 +29,9 @@ def train_demand_model(data_path: str, model_output_path: str):
     print(f"Feature columns used: {feature_cols}")
     X_train = train_df[feature_cols]
     y_train = train_df[target_col]
+
+    # Print the actual feature names that will be used for training
+    print(f"Actual features used for training: {X_train.columns}")
 
     print("Training LightGBM demand model...")
     # Initialize and train the model with default parameters
@@ -40,6 +45,13 @@ def train_demand_model(data_path: str, model_output_path: str):
     print(f"Saving trained model to {model_output_path}...")
     joblib.dump(lgbm, model_output_path)
     print("Model saved successfully.")
+
+    # Save the feature names to a json file
+    feature_names_path = os.path.join(output_dir, "feature_names.json")
+    with open(feature_names_path, 'w') as f:
+        json.dump(X_train.columns, f)
+    print(f"Feature names saved to {feature_names_path}")
+
 
 if __name__ == "__main__":
     DATA_PATH = "data/processed/train_scaled.parquet"

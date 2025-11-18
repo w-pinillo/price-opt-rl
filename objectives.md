@@ -79,7 +79,7 @@ Formalize state, action, and reward; implement an OpenAI Gym compatible environm
 ### Design decisions to make first
 
 *   **Action type**: discrete (e.g., set of percent changes) or continuous (price multiplier). Decide and document in `config.yaml`.
-*   **Reward formulation**: revenue or profit. A reward shaping ablation (e.g., `revenue - λ·volatility`) can be tested. Decide primary business objective.
+*   **Reward formulation**: revenue or profit. Decide primary business objective.
 *   **Demand simulator approach**: parametric log-linear elasticity model (recommended for prototyping) or learned demand model (XGBoost/LightGBM) trained on historical data. We will proceed with implementing the learned demand model approach using LightGBM for a higher-fidelity simulation.
 
 ### Steps to implement (in Python)
@@ -95,7 +95,7 @@ Formalize state, action, and reward; implement an OpenAI Gym compatible environm
     *   Given action, compute new price.
     *   Use the demand simulator to compute demand at that price.
     *   Compute `units_sold` (respect inventory if modeled), compute revenue / profit.
-    *   Compute `reward` = revenue (or custom), apply optional penalties for volatility.
+    *   Compute `reward` = revenue (or custom).
     *   Update internal state (advance time, update lags and rolling features).
     *   Return `next_state`, `reward`, `done`, `info` (include price, units, revenue in `info`).
 *   **Demand simulator options**:
@@ -192,7 +192,7 @@ Compare trained agents against a comprehensive suite of baselines (from simple h
 ### Robustness and Sensitivity Analysis
 
 *   **Simulator Misspecification:** Create alternate versions of the simulation environment where the demand elasticity parameter is perturbed (e.g., ±20%). Evaluate all policies (agents and baselines) in these environments to measure their robustness.
-*   **Reward Shaping Ablation:** Compare the performance of agents trained with the pure revenue reward vs. agents trained with a reward function that penalizes price volatility (e.g., `revenue - λ * price_change^2`).
+
 
 ### Visualization outputs
 

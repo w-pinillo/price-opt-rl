@@ -18,7 +18,7 @@
 
 ## Objective 2 — Define the MDP and implement the simulation environment
 
-**Status:** In Progress
+**Status:** Completed
 
 **Details:**
 - The initial `ParametricDemandSimulator` is complete.
@@ -26,14 +26,12 @@
     - A LightGBM model was trained to predict demand (`src/models/train_demand_model.py`).
     - The model shows excellent performance on the validation set (R² > 0.99).
     - A new `MLDemandSimulator` class was added to `src/envs/simulators.py`.
-
-**Next Steps:**
-- Integrate the new `MLDemandSimulator` into the main `PriceEnv`.
-- Refactor `config.yaml` to allow for dynamic selection between `parametric` and `ml` simulators.
-- Update the `PriceEnv` `step` method to construct the feature vector required by the ML model.
+- The `PriceEnv` has been updated to integrate the `MLDemandSimulator`, including constructing the proper feature vector, ensuring feature scaling consistency, and handling out-of-bound predictions.
+- The `config.yaml` has been refactored to allow for dynamic selection between `parametric` and `ml` simulators.
+- **Feature Selection for Demand Model:** Through an iterative process of training and feature importance analysis, the feature set for the demand model was significantly optimized. It was discovered that the 30 `PROD_CATEGORY` features and the `days_since_price_change` feature were redundant and could be removed without any meaningful loss in model performance. The final model uses a lean set of **18 features** while maintaining an R² of ~0.9945, providing a highly accurate simulation and an efficient state space for the DRL agent.
 
 **Optimality Assessment:**
-- The simulation environment is being upgraded to a more realistic, data-driven model, which will allow for the training of more robust and effective DRL agents.
+- The simulation environment is now upgraded to a more realistic, data-driven model, which will allow for the training of more robust and effective DRL agents. The state space has been optimized for DRL learning efficiency.
 
 ## Objective 3 — Implement and train DRL agents (DQN and PPO)
 
@@ -68,45 +66,3 @@
 - The evaluation plan has been significantly enhanced to provide a rigorous, thesis-ready comparison of the DRL agents. It is designed to isolate the value added by the agents and test their robustness. Implementation of this new plan is the next step.
 
 **Next Steps:** Implement the enhanced evaluation framework. This involves creating the new baseline policies (`src/baselines.py`) and updating the evaluation script (`src/evaluation.py`) and notebook (`notebooks/02-Evaluation.ipynb`) to reflect the new experiments and metrics.
-
-## Objective 5 — Master's Thesis Redaction
-
-**Status:** In Progress
-
-**Details:**
-- The master's thesis will be written in English.
-
-## LaTeX Thesis Template Guide
-
-This section summarizes how to work with the LaTeX template located in the `trabajo-final/` directory.
-
-- **Main File:** The main file is `0000.tex`. All other `.tex` files are included from here.
-- **Compilation:** To compile the document, run the following commands from within the `trabajo-final/` directory:
-    1. `pdflatex -shell-escape 0000.tex`
-    2. `bibtex 0000`
-    3. `pdflatex -shell-escape 0000.tex`
-    4. `pdflatex -shell-escape 0000.tex`
-- **Dependencies:**
-    - The `-shell-escape` flag is required for the `minted` package (used for code highlighting).
-    - The `lmodern` package is required for the `microtype` package to work correctly.
-    - You may need to install language packs for `babel`, for example: `sudo apt-get install texlive-lang-spanish`.
-- **Packages:** Additional LaTeX packages can be added in `0000.tex` using the `\usepackage{}` command.
-- **Comments:** Use the `%` character to add comments to the `.tex` files.
-- **Document Structure:** Use the following commands to structure the document:
-    - `\chapter{Chapter Name}`
-    - `\section{Section Name}`
-    - `\subsection{Subsection Name}`
-    - `\subsubsection{Subsubsection Name}`
-    - `\paragraph{Paragraph Name}`
-- **Paragraphs:** Use `\par` to start a new paragraph with the correct spacing.
-- **Images:** 
-    - Use the `figure` environment to include images that should be listed in the "Lista de Figuras".
-    - Store image files in the `00Figuras/` directory.
-    - `\includegraphics` to insert the image and `\caption` to add a caption.
-- **Tables:**
-    - Use the `table` environment to include tables that should be listed in the "Lista de Tablas".
-    - The guide suggests using online tools like [Table Generator](https://www.tablesgenerator.com/) to create complex tables.
-- **Lists:**
-    - Use the `itemize` environment for bulleted lists.
-    - Use the `enumerate` environment for numbered lists.
-- **Bibliography:** Add new references to the `Referencias.bib` file.

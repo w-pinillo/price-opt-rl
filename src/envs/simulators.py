@@ -1,6 +1,7 @@
 import numpy as np
 import joblib
 import os
+import pandas as pd # Import pandas
 
 class ParametricDemandSimulator:
     """
@@ -37,11 +38,13 @@ class MLDemandSimulator:
     """
     Simulates demand using a pre-trained machine learning model.
     """
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str, noise_std: float = 0.0, feature_names: list = None):
         print(f"Loading demand model from {model_path}...")
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Demand model not found at {model_path}")
         self.model = joblib.load(model_path)
+        self.noise_std = noise_std
+        self.feature_names = feature_names # Store feature names
         print("Demand model loaded successfully.")
 
     def simulate_demand(self, features: np.ndarray) -> float:
@@ -52,8 +55,19 @@ class MLDemandSimulator:
         if features.ndim == 1:
             features = features.reshape(1, -1)
             
+        # Convert to DataFrame with feature names if available
+        if self.feature_names:
+            features_df = pd.DataFrame(features, columns=self.feature_names)
+        else:
+            features_df = pd.DataFrame(features) # Fallback if no names provided
+
         # Predict demand
-        predicted_demand = self.model.predict(features)[0]
+        predicted_demand = self.model.predict(features_df)[0]
+
+        # Add noise if noise_std is greater than 0
+        if self.noise_std > 0:
+            noise = np.random.normal(0, self.noise_std)
+            predicted_demand += noise
 
         # Ensure demand is non-negative
         return max(0, predicted_demand)

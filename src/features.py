@@ -66,7 +66,6 @@ def aggregate_daily(lazy_df: pl.LazyFrame, product_ids: list) -> pl.DataFrame:
             pl.sum("QUANTITY").alias("total_units"),
             pl.sum("SPEND").alias("total_sales"),
             pl.first("SHOP_WEEK").alias("SHOP_WEEK"),
-            pl.first("PROD_CODE_20").alias("PROD_CATEGORY")
         ])
         .sort(["SHOP_DATE", "PROD_CODE"])
         .collect(streaming=True) # Use streaming for potentially large results
@@ -77,45 +76,30 @@ def generate_time_series_features(df: pl.DataFrame) -> pl.DataFrame:
     """
     Generates time-series features for the daily aggregated product data.
     """
+    # First, create intermediate time-based features
     df_with_base_features = df.with_columns([
-        # Time-based features
         pl.col("SHOP_DATE").dt.weekday().alias("day_of_week"),
         pl.col("SHOP_DATE").dt.month().alias("month"),
         pl.col("SHOP_DATE").dt.year().alias("year"),
         pl.col("SHOP_DATE").dt.day().alias("day_of_month"),
         pl.col("SHOP_DATE").dt.week().alias("week_of_year"),
-        (pl.col("SHOP_DATE").dt.weekday().is_in([6, 7])).alias("is_weekend"),
     ])
 
-    # Add days_since_price_change
-    df_with_days_since_change = df_with_base_features.with_columns(
-        (pl.col("avg_price").diff(1).fill_null(0) != 0).over("PROD_CODE").alias("_price_changed")
-    ).with_columns(
-        pl.col("_price_changed").cum_sum().over("PROD_CODE").alias("_price_change_group")
-    ).with_columns(
-        pl.arange(0, pl.count()).over(["PROD_CODE", "_price_change_group"]).alias("days_since_price_change")
-    )
-
-    df_with_all_features = df_with_days_since_change.with_columns([
+    # Now, use the intermediate features to create the final feature set
+    df_with_all_features = df_with_base_features.with_columns([
         # Seasonality features
         (2 * np.pi * pl.col("day_of_week") / 7).sin().alias("day_of_week_sin"),
-        (2 * np.pi * pl.col("day_of_week") / 7).cos().alias("day_of_week_cos"),
-        (2 * np.pi * pl.col("month") / 12).sin().alias("month_sin"),
         (2 * np.pi * pl.col("month") / 12).cos().alias("month_cos"),
 
         # Lag features for total_units
         pl.col("total_units").shift(1).over("PROD_CODE").alias("lag_1_units"),
         pl.col("total_units").shift(7).over("PROD_CODE").alias("lag_7_units"),
-        pl.col("total_units").shift(14).over("PROD_CODE").alias("lag_14_units"),
-        pl.col("total_units").shift(28).over("PROD_CODE").alias("lag_28_units"),
         
         # Rolling mean features for total_units
-        pl.col("total_units").rolling_mean(window_size=7).over("PROD_CODE").alias("rolling_mean_7_units"),
         pl.col("total_units").rolling_mean(window_size=28).over("PROD_CODE").alias("rolling_mean_28_units"),
 
         # Rolling std dev features for total_units
         pl.col("total_units").rolling_std(window_size=7).over("PROD_CODE").alias("rolling_std_7_units"),
-        pl.col("total_units").rolling_std(window_size=28).over("PROD_CODE").alias("rolling_std_28_units"),
         
         # Price change percentage
         (pl.col("avg_price") / pl.col("avg_price").shift(1).over("PROD_CODE") - 1).alias("price_change_pct"),
@@ -124,7 +108,7 @@ def generate_time_series_features(df: pl.DataFrame) -> pl.DataFrame:
         ((pl.col("avg_price") - pl.min("avg_price").over("PROD_CODE")) / 
          (pl.max("avg_price").over("PROD_CODE") - pl.min("avg_price").over("PROD_CODE"))
         ).alias("price_position"),
-    ]).drop(["_price_changed", "_price_change_group"])
+    ])
     return df_with_all_features
 
 def temporal_split(df: pl.DataFrame, train_end_date: str, val_end_date: str) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
