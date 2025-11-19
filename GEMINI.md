@@ -26,9 +26,10 @@
     - A LightGBM model was trained to predict demand (`src/models/train_demand_model.py`).
     - The model shows excellent performance on the validation set (R² > 0.99).
     - A new `MLDemandSimulator` class was added to `src/envs/simulators.py`.
-- The `PriceEnv` has been updated to integrate the `MLDemandSimulator`, including constructing the proper feature vector, ensuring feature scaling consistency, and handling out-of-bound predictions.
+- The `PriceEnv` has been updated to integrate the `MLDemandSimulator`, including constructing the proper feature vector, ensuring feature scaling consistency, handling out-of-bound predictions, and passing the environment's random generator for reproducible stochasticity.
+- The core environment logic has been thoroughly validated, covering the Markov property of state transitions, episode termination and reset mechanisms, and the accuracy of reward calculation.
 - The `config.yaml` has been refactored to allow for dynamic selection between `parametric` and `ml` simulators.
-- **Feature Selection for Demand Model:** Through an iterative process of training and feature importance analysis, the feature set for the demand model was significantly optimized. It was discovered that the 30 `PROD_CATEGORY` features and the `days_since_price_change` feature were redundant and could be removed without any meaningful loss in model performance. The final model uses a lean set of **18 features** while maintaining an R² of ~0.9945, providing a highly accurate simulation and an efficient state space for the DRL agent.
+- **Feature Selection for Demand Model:** Through an iterative process of training and feature importance analysis, the feature set for the demand model was significantly optimized. It was discovered that the 30 `PROD_CATEGORY` features were redundant and could be removed without any meaningful loss in model performance. The final model uses a lean set of **18 features** while maintaining an R² of ~0.9945, providing a highly accurate simulation and an efficient state space for the DRL agent.
 
 **Optimality Assessment:**
 - The simulation environment is now upgraded to a more realistic, data-driven model, which will allow for the training of more robust and effective DRL agents. The state space has been optimized for DRL learning efficiency.
