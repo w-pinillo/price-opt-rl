@@ -36,7 +36,7 @@
 
 ## Objective 3 — Implement and train DRL agents (DQN and PPO)
 
-**Status:** Completed
+**Status:** Completed (Core Implementation), In Progress (Hyperparameter Optimization)
 
 **Details:**
 - The project has been updated with all necessary dependencies for training, including `stable-baselines3`, `torch`, and `tensorboard`.
@@ -45,8 +45,18 @@
 - Training scripts for both DQN (`src/models/train_dqn.py`) and PPO (`src/models/train_ppo.py`) have been created.
 - Both models have been successfully trained as a smoke test, and the resulting model files have been saved to `models/dqn/` and `models/ppo/` respectively.
 
+### Sub-Objective 3.1 — Hyperparameter Optimization
+
+**Status:** Proposed
+
+**Details:**
+- To ensure optimal performance of the DRL agents, a systematic hyperparameter optimization strategy is crucial.
+- **Approach:** Bayesian Optimization, leveraging libraries like Optuna, will be implemented due to its efficiency in exploring complex and computationally expensive hyperparameter spaces typical of DRL.
+- This involves defining search spaces for key hyperparameters (e.g., learning rate, `gamma`, `batch_size`, network architecture parameters) and creating an objective function that trains and evaluates agents with different hyperparameter sets.
+
 **Optimality Assessment:**
 - The training pipeline is now complete for both DQN and PPO agents. The scripts are configurable and leverage best practices like callbacks for saving the best model. This fulfills the requirements of Objective 3.
+- Implementing hyperparameter optimization is critical for maximizing the performance of the trained DRL agents, ensuring the thesis results are based on well-tuned models.
 
 ## Objective 4 — Evaluation and comparison
 
