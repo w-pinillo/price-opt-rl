@@ -40,7 +40,6 @@ def load_scalers(input_path: str, feature_cols: list, scaler_type: str = "Standa
         scaler_filename = os.path.join(input_path, f"{col}_{scaler_type.lower()}.joblib")
         if os.path.exists(scaler_filename):
             scalers[col] = joblib.load(scaler_filename)
-            print(f"Scaler for {col} loaded from {scaler_filename}")
         else:
             print(f"Warning: Scaler file not found for {col} at {scaler_filename}")
     return scalers
@@ -83,12 +82,12 @@ def make_env(data: pl.DataFrame, config: dict, product_id: int):
     product_data = data.filter(pl.col("PROD_CODE") == product_id)
     
     # Dynamically get PROD_CATEGORY columns
-    prod_category_cols = [col for col in product_data.columns if col.startswith("PROD_CATEGORY_")]
+    # prod_category_cols = [col for col in product_data.columns if col.startswith("PROD_CATEGORY_")] # Removed
 
     # Create the environment
     env = PriceEnv(
         data=product_data,
         config=config,
-        prod_category_cols=prod_category_cols
+        # Removed prod_category_cols=prod_category_cols
     )
     return env

@@ -30,23 +30,19 @@ def run_data_pipeline(raw_data_path: str, processed_data_dir: str, scalers_dir: 
     df_with_features = generate_time_series_features(product_daily_df)
     print(f"Data with features shape: {df_with_features.shape}")
 
-    # Handle NaNs introduced by lag features (e.g., for the first few rows)
-    # For simplicity, we'll drop rows with NaNs. A more sophisticated approach might impute.
-    df_with_features = df_with_features.drop_nulls()
-    print(f"Data after dropping NaNs: {df_with_features.shape}")
-
     # Define feature columns for scaling
     feature_cols = [
         "avg_price", "total_units", "total_sales",
-        "day_of_week_sin", "month_cos",
-        "lag_1_units", "lag_7_units",
-        "rolling_mean_28_units",
-        "rolling_std_7_units",
+        "day_of_week_sin", "day_of_week_cos", "month_sin", "month_cos",
+        "lag_1_units", "lag_7_units", "lag_14_units", "lag_28_units",
+        "rolling_mean_7_units", "rolling_mean_28_units",
+        "rolling_std_7_units", "rolling_std_28_units",
         "price_change_pct",
-        "day_of_month", "week_of_year",
-        "price_position",
+        "day_of_month", "week_of_year", "is_weekend",
+        "days_since_price_change", "price_position",
         "SHOP_WEEK"
     ]
+    # Removed dynamic addition of PROD_CATEGORY_ features
 
     # Define temporal split dates
     train_end_date = "2008-01-10"
@@ -57,13 +53,18 @@ def run_data_pipeline(raw_data_path: str, processed_data_dir: str, scalers_dir: 
     train_df, val_df, test_df = temporal_split(df_with_features, train_end_date, val_end_date)
     print(f"Train shape: {train_df.shape}, Val shape: {val_df.shape}, Test shape: {test_df.shape}")
 
+    # Handle NaNs introduced by lag features for each split separately
+    # This ensures that only relevant rows for each split are dropped
+    train_df = train_df.drop_nulls()
+    val_df = val_df.drop_nulls()
+    test_df = test_df.drop_nulls()
+    print(f"Data after dropping NaNs: Train shape: {train_df.shape}, Val shape: {val_df.shape}, Test shape: {test_df.shape}")
+
     # 6. Scale numeric features
     print("Fitting and saving scalers...")
     fit_save_scalers(train_df, feature_cols, scalers_dir)
     
     print("Applying scalers to train, validation, and test sets...")
-    # Load scalers to ensure consistency, though they are already in memory from fit_save_scalers
-    # This step is more critical when applying scalers in a separate inference pipeline
     loaded_scalers = fit_save_scalers(train_df, feature_cols, scalers_dir) # Re-using fit_save_scalers to get the dict of scalers
 
     train_df_scaled = apply_scalers(train_df, loaded_scalers, feature_cols)
@@ -93,3 +94,4 @@ if __name__ == "__main__":
         # Ensure scalers directory exists
         os.makedirs(SCALERS_DIR, exist_ok=True)
         run_data_pipeline(RAW_DATA_PATH, PROCESSED_DATA_DIR, SCALERS_DIR)
+

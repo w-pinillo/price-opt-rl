@@ -22,7 +22,7 @@ class PriceEnv(gym.Env):
     """
     metadata = {"render_modes": ["human"], "render_fps": 30}
 
-    def __init__(self, data: pl.DataFrame, config: dict, prod_category_cols: list, render_mode=None):
+    def __init__(self, data: pl.DataFrame, config: dict, render_mode=None): # Removed prod_category_cols
         super().__init__()
 
         self.df = data
@@ -43,7 +43,7 @@ class PriceEnv(gym.Env):
             "days_since_price_change", "price_position",
             "SHOP_WEEK"
         ]
-        self.all_scaled_features.extend(prod_category_cols)
+        # Removed self.all_scaled_features.extend(prod_category_cols)
 
         # Load all scalers
         self.scalers = load_scalers(self.config['paths']['scalers_dir'], self.all_scaled_features)
@@ -58,7 +58,7 @@ class PriceEnv(gym.Env):
             "rolling_std_7_units", "rolling_std_28_units",
             "price_change_pct", "days_since_price_change", "price_position"
         ]
-        self.feature_cols.extend(prod_category_cols)
+        # Removed self.feature_cols.extend(prod_category_cols)
         self.time_cols = ["day_of_week", "month", "year", "day_of_month", "week_of_year", "is_weekend"]
         
         # Features for the ML demand model (must match training features exactly)
@@ -79,14 +79,16 @@ class PriceEnv(gym.Env):
         simulator_approach = self.config['env']['demand_simulator_approach']
         if simulator_approach == "parametric":
             self.demand_simulator = ParametricDemandSimulator(
-                **self.config['env']['parametric_simulator']
+                **self.config['env']['parametric_simulator'],
+                random_generator=self.np_random
             )
         elif simulator_approach == "ml_model":
             model_path = os.path.join(self.config['paths']['models_dir'], 'demand_model/lgbm_demand_model.joblib')
             self.demand_simulator = MLDemandSimulator(
                 model_path=model_path,
                 noise_std=self.config['env']['ml_model_simulator']['noise_std'],
-                feature_names=self.feature_cols_ml_model
+                feature_names=self.feature_cols_ml_model,
+                random_generator=self.np_random
             )
         else:
             raise ValueError(f"Unknown demand_simulator_approach: {simulator_approach}")
@@ -100,6 +102,7 @@ class PriceEnv(gym.Env):
                 shape=(1,), dtype=np.float32
             )
 
+        # Adjusted observation_space shape
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, 
             shape=(len(self.feature_cols) + len(self.time_cols),), 
@@ -200,6 +203,8 @@ class PriceEnv(gym.Env):
 
         observation = self._get_obs() if not done else np.zeros(self.observation_space.shape)
         info = self._get_info() if not done else {}
+        if not done:
+            info["units_sold"] = units_sold # Add units_sold to info dictionary
         
         # The gymnasium step function returns 5 values: obs, reward, terminated, truncated, info
         terminated = done 
