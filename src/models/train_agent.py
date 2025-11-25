@@ -1,7 +1,6 @@
 import yaml
 import os
 import polars as pl
-from stable_baselines3 import DQN, PPO, A2C
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.monitor import Monitor
 import importlib
@@ -14,18 +13,20 @@ def get_agent_class(agent_name: str):
     """
     try:
         module = importlib.import_module("stable_baselines3")
-        return getattr(module, agent_name)
+        # Agent classes in SB3 are uppercase (e.g., DQN, PPO)
+        return getattr(module, agent_name.upper())
     except (ImportError, AttributeError):
         raise ValueError(f"Agent '{agent_name}' not found in stable-baselines3.")
 
-def train_agent():
+def train(config: dict, run_dir: str):
     """
     Main function to train a specified RL agent.
-    """
-    # --- 1. Load configuration and set seed ---
-    with open("config.yaml", 'r') as f:
-        config = yaml.safe_load(f)
 
+    Args:
+        config (dict): The experiment configuration.
+        run_dir (str): The directory for saving all experiment artifacts.
+    """
+    # --- 1. Set seed ---
     seed_everything(config['training']['seed'])
 
     # --- 2. Load data ---
@@ -39,21 +40,19 @@ def train_agent():
     # --- 3. Create training and evaluation environments ---
     product_id = config['training']['product_id']
     print(f"Creating environment for product: {product_id}")
+    
+    # Monitor wraps the envs to log rewards and episode lengths
     env = make_env(data, config, product_id)
-    env = Monitor(env)
+    env = Monitor(env, os.path.join(run_dir, "train_monitor.csv") )
 
     eval_env = make_env(data, config, product_id)
-    eval_env = Monitor(eval_env)
+    eval_env = Monitor(eval_env, os.path.join(run_dir, "eval_monitor.csv") )
 
     # --- 4. Define Callbacks ---
-    agent_name = config['training']['agent_name']
-    model_dir = os.path.join(config['paths']['models_dir'], agent_name.lower())
-    os.makedirs(model_dir, exist_ok=True)
-    
     eval_callback = EvalCallback(
         eval_env,
-        best_model_save_path=os.path.join(model_dir, 'best_model'),
-        log_path=os.path.join(model_dir, 'logs'),
+        best_model_save_path=os.path.join(run_dir, 'best_model'),
+        log_path=os.path.join(run_dir, 'logs'),
         eval_freq=config['training']['eval_freq'],
         n_eval_episodes=config['training']['n_eval_episodes'],
         deterministic=True,
@@ -61,15 +60,24 @@ def train_agent():
     )
 
     # --- 5. Instantiate and Train the Model ---
-    print(f"Instantiating {agent_name} model...")
+    agent_name = config['agent']
+    print(f"Instantiating {agent_name.upper()} model...")
     agent_class = get_agent_class(agent_name)
-    agent_config = config['agents'][agent_name]
+    
+    # Select agent-specific hyperparameters from the config
+    if agent_name in config.get('agent_params', {}):
+        agent_config = config['agent_params'][agent_name]
+    else:
+        # Fallback to empty config if no specific params are provided
+        agent_config = {}
+        print(f"Warning: No specific parameters found for agent '{agent_name}'. Using defaults.")
+
 
     model = agent_class(
         "MlpPolicy",
         env,
         verbose=1,
-        tensorboard_log=os.path.join(model_dir, 'tensorboard_log'),
+        tensorboard_log=os.path.join(run_dir, 'tensorboard_log'),
         **agent_config
     )
 
@@ -79,13 +87,13 @@ def train_agent():
         callback=eval_callback
     )
 
-    # --- 6. Save the final model ---
-    final_model_path = os.path.join(model_dir, 'final_model.zip')
+    # --- 6. Save the final model and return best reward ---
+    final_model_path = os.path.join(run_dir, 'final_model.zip')
     model.save(final_model_path)
 
     print(f"\nTraining complete.")
     print(f"Final model saved to: {final_model_path}")
-    print(f"Best performing model saved in: {os.path.join(model_dir, 'best_model')}")
+    print(f"Best performing model saved in: {os.path.join(run_dir, 'best_model')}")
 
-if __name__ == "__main__":
-    train_agent()
+    # Return the best mean reward for Optuna
+    return eval_callback.best_mean_reward

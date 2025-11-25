@@ -25,33 +25,12 @@ env:
 # Objective 3: DRL Agent Training Configuration
 
 training:
-  agent_name: "DQN" # Algorithm to use (e.g., "DQN", "PPO", "A2C")
+  agent: "DQN" # Default agent, will be overridden by experiment files
   total_timesteps: 100000
   eval_freq: 10000
   n_eval_episodes: 10
   seed: 42
   product_id: "PRD0904358" # Product to train on
-
-# Algorithm-specific Hyperparameters
-agents:
-  DQN:
-    learning_rate: 0.0001
-    buffer_size: 100000
-    batch_size: 32
-    gamma: 0.99
-    target_update_interval: 1000
-    policy_kwargs:
-      net_arch: [256, 256]
-
-  PPO:
-    learning_rate: 0.0003
-    n_steps: 2048
-    batch_size: 64
-    n_epochs: 10
-    gamma: 0.99
-    gae_lambda: 0.95
-    policy_kwargs:
-      net_arch: [256, 256]
 
 # Cross-cutting Configuration
 paths:

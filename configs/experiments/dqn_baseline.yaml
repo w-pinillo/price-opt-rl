@@ -1,0 +1,13 @@
+# configs/experiments/dqn_baseline.yaml
+agent: dqn
+agent_params:
+  dqn:
+    learning_rate: 0.001
+    buffer_size: 100000
+    learning_starts: 50000
+    batch_size: 256
+    tau: 1.0
+    gamma: 0.99
+    train_freq: 4
+    gradient_steps: 1
+    target_update_interval: 10000

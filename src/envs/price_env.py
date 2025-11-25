@@ -204,7 +204,8 @@ class PriceEnv(gym.Env):
         observation = self._get_obs() if not done else np.zeros(self.observation_space.shape)
         info = self._get_info() if not done else {}
         if not done:
-            info["units_sold"] = units_sold # Add units_sold to info dictionary
+            info["units_sold"] = units_sold
+            info["price"] = new_price # Add new_price to info dictionary
         
         # The gymnasium step function returns 5 values: obs, reward, terminated, truncated, info
         terminated = done 

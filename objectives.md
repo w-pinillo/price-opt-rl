@@ -164,21 +164,19 @@ Implement end-to-end training scripts to train DQN (for discrete actions) and PP
 ## Objective 4 — Evaluation and comparison
 
 ### Goal
-Compare trained agents against a comprehensive suite of baselines (from simple heuristics to strong model-based policies), compute business and operational metrics, run robustness checks, and produce a full analysis report.
+To provide a comprehensive evaluation of the DRL pricing agents by answering three fundamental questions:
+1.  **Improvement:** Do they make better decisions than past strategies, leading to increased revenue or efficiency?
+2.  **Adaptability:** Do they outperform simple, safe rules that lack dynamic decision-making capabilities?
+3.  **Reliability:** Are their pricing strategies stable and consistent over time, and robust to changes in market conditions?
 
 ### Steps to implement (in Python)
 
-*   **Train demand model for baselines**
-    *   Train a demand prediction model (e.g., XGBoost) on the historical training data (`train_scaled.parquet`).
-    *   Crucially, this model must not have any privileged access to the simulator's internal parameters to ensure a fair comparison.
 *   **Implement evaluation backtest script (`src/evaluation.py`)** that:
     *   Loads the trained DRL agents (DQN, PPO) and the test split.
     *   Runs the agents over the test period and collects daily results.
     *   Runs the full suite of baselines over the same period:
         *   **Historical Policy:** Replay the actual historical prices.
         *   **Rule-Based Policy:** A simple business heuristic (e.g., `price = median_historical_price`).
-        *   **Greedy Model-Based Policy:** At each step, use the demand model to choose the price that maximizes immediate expected revenue.
-        *   **Model-Based Planning (MPC):** At each step, use the demand model to simulate outcomes over a short future horizon (e.g., 7 days) and select the price that maximizes cumulative revenue over that horizon.
 
 ### Compute metrics
 
@@ -207,12 +205,12 @@ Compare trained agents against a comprehensive suite of baselines (from simple h
     *   A summary table of all metrics comparing all policies.
     *   Confidence intervals and interpretation of results.
     *   Figures saved to `reports/figures/`.
-*   Write a thesis section summarizing the evaluation methodology and results.
+*   Write a thesis section summarizing the evaluation methodology and results, structured around the questions of Improvement, Adaptability, and Reliability.
 
 ### Files / functions to create
 
 *   `src/evaluation.py`: `evaluate_policy(...)`, `backtest_model(...)`
-*   `src/baselines.py`: Implementations for Historical, Rule-based, Greedy, and MPC policies.
+*   `src/baselines.py`: Implementations for Historical and Rule-based policies.
 *   `reports/evaluation_notebook.ipynb` (deliverable)
 *   `reports/tables/metrics_summary.csv`
 
@@ -220,7 +218,6 @@ Compare trained agents against a comprehensive suite of baselines (from simple h
 
 *   Backtest dataset alignment: ensure all policies' predicted daily results align with dates in the test set.
 *   Bootstrap script returns stable CIs with sufficient iterations (e.g., 1000).
-*   Ensure the demand model for baselines is trained without data leakage from the validation/test sets or the simulator's true parameters.
 
 ### Acceptance criteria
 
