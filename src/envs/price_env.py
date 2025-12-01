@@ -52,7 +52,7 @@ class PriceEnv(gym.Env):
         # Features for the observation space (used by the agent)
         # This list should be carefully chosen to represent the agent's state
         self.feature_cols = [
-            "avg_price", "total_units", "total_sales",
+            "avg_price",
             "lag_1_units", "lag_7_units", "lag_14_units", "lag_28_units",
             "rolling_mean_7_units", "rolling_mean_28_units",
             "rolling_std_7_units", "rolling_std_28_units",
