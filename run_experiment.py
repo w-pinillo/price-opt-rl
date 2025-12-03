@@ -16,7 +16,7 @@ def merge_configs(d, u):
             d[k] = v
     return d
 
-def run_experiment(exp_config_path: str):
+def run_experiment(exp_config_path: str, args):
     """
     Run a single experiment based on a configuration file.
     """
@@ -37,6 +37,11 @@ def run_experiment(exp_config_path: str):
 
     # --- 2. Merge Configurations ---
     config = merge_configs(base_config, exp_config)
+
+    # Override total_timesteps if provided via command line
+    if args.total_timesteps is not None:
+        print(f"Overriding total_timesteps from config ({config['training']['total_timesteps']}) to {args.total_timesteps}")
+        config['training']['total_timesteps'] = args.total_timesteps
 
     # --- 3. Create Unique Output Directory ---
     exp_name = os.path.splitext(os.path.basename(exp_config_path))[0]
@@ -66,10 +71,17 @@ def run_experiment(exp_config_path: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run a DRL experiment.")
     parser.add_argument(
-        "exp_config",
+        "--config",
+        dest="exp_config",
         type=str,
+        required=True,
         help="Path to the experiment configuration file (e.g., 'configs/experiments/dqn_baseline.yaml')",
+    )
+    parser.add_argument(
+        "--total-timesteps",
+        type=int,
+        help="Override total timesteps for training.",
     )
     args = parser.parse_args()
     
-    run_experiment(args.exp_config)
+    run_experiment(args.exp_config, args)

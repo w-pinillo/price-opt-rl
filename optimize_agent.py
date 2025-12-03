@@ -27,7 +27,7 @@ def define_search_space(trial: optuna.trial.Trial, agent_name: str) -> dict:
         # 'epsilon_decay' is also not a direct parameter in SB3's DQN, it uses a linear schedule by default.
         return {
             'learning_rate': trial.suggest_categorical('learning_rate', [1e-4, 5e-4, 1e-3]),
-            'buffer_size': trial.suggest_categorical('buffer_size', [50000, 100000]),
+            'buffer_size': trial.suggest_categorical('buffer_size', [10000, 25000, 50000]),
             'batch_size': trial.suggest_categorical('batch_size', [32, 64, 128]),
             'gamma': trial.suggest_categorical('gamma', [0.99, 0.95]),
             'target_update_interval': trial.suggest_categorical('target_update_interval', [1000, 5000]),
@@ -35,7 +35,7 @@ def define_search_space(trial: optuna.trial.Trial, agent_name: str) -> dict:
     elif agent_name.lower() == 'ppo':
         return {
             'learning_rate': trial.suggest_categorical('learning_rate', [1e-4, 3e-4, 1e-3]),
-            'n_steps': trial.suggest_categorical('n_steps', [1024, 2048, 4096]),
+            'n_steps': trial.suggest_categorical('n_steps', [512, 1024, 2048]),
             'batch_size': trial.suggest_categorical('batch_size', [32, 64, 128]),
             'n_epochs': trial.suggest_categorical('n_epochs', [5, 10, 20]),
             'gamma': trial.suggest_categorical('gamma', [0.99, 0.95]),
@@ -45,7 +45,7 @@ def define_search_space(trial: optuna.trial.Trial, agent_name: str) -> dict:
     elif agent_name.lower() == 'sac':
         return {
             'learning_rate': trial.suggest_categorical('learning_rate', [1e-4, 3e-4, 1e-3]),
-            'buffer_size': trial.suggest_categorical('buffer_size', [100000, 500000]),
+            'buffer_size': trial.suggest_categorical('buffer_size', [50000, 100000]),
             'batch_size': trial.suggest_categorical('batch_size', [64, 128, 256]),
             'gamma': trial.suggest_categorical('gamma', [0.99, 0.95]),
             'tau': trial.suggest_categorical('tau', [0.005, 0.01, 0.02]),
@@ -133,6 +133,12 @@ if __name__ == "__main__":
         default=None,
         help="Name for the Optuna study. If not provided, a timestamped name is generated."
     )
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=2,
+        help="The number of parallel jobs to run for optimization."
+    )
     args = parser.parse_args()
 
     # --- Create Study Directory ---
@@ -153,7 +159,7 @@ if __name__ == "__main__":
     objective_func = lambda trial: objective(trial, args.agent, study_dir)
     
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective_func, n_trials=args.n_trials)
+    study.optimize(objective_func, n_trials=args.n_trials, n_jobs=args.n_jobs)
 
     # --- Print and Save Results ---
     print("\n--- Optimization Finished ---")

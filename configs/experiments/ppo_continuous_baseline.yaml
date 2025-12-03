@@ -1,7 +1,9 @@
-# configs/experiments/ppo_baseline.yaml
+# configs/experiments/ppo_continuous_baseline.yaml
 agent: ppo
 training:
   n_envs: 4
+env:
+  action_type: continuous
 agent_params:
   ppo:
     learning_rate: 0.0003

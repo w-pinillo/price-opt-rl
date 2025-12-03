@@ -1,79 +1,44 @@
-# Gemini Project Log
 
-## Objective 1 - Data Preparation
+## Objective 5 - Hardware Acceleration and Experimentation
 
-**Status:** Completed
+### Goal
+Configure the project and system environment to leverage a powerful desktop with a dedicated NVIDIA GPU (Ryzen 7 9700X, RTX 5060 Ti 16GB) to accelerate training and hyperparameter tuning.
 
-**Details:**
-- The data preparation pipeline has been successfully executed.
-- The final feature set includes:
-    - **Lags:** Demand lags for 1, 7, 14, and 28 days.
-    - **Rolling Stats:** 7 and 28-day rolling means and standard deviations for demand.
-    - **Seasonality:** Cyclical `sin/cos` features for `day_of_week` and `month`.
-- Processed, scaled, and split datasets (`train`, `val`, `test`) have been saved to `data/processed/`.
-- The corresponding feature scalers have been saved to `models/scalers/`.
+### To-Do List
 
-**Optimality Assessment:**
-- The data preparation pipeline is modular, reproducible, and now includes a more robust feature set to better capture demand dynamics and seasonality, providing a solid foundation for training the DRL agents.
+- [x] **Environment Setup:** Install NVIDIA drivers, CUDA Toolkit, and cuDNN.
+- [x] **Python Dependencies:** Create a Python virtual environment and install the GPU-enabled version of PyTorch.
+- [x] **Configuration:** Add a `device: cuda` parameter to `configs/base_config.yaml`.
+- [ ] **Code Modification:** Modify `src/models/train_agent.py` to use the new `device` configuration.
+- [ ] **Performance Tuning:** Increase `n_envs`, `batch_size`, and `buffer_size` in experiment configs to better utilize the hardware.
+- [ ] **Parallelization:** Update `optimize_agent.py` to run Optuna trials in parallel by setting the `n_jobs` parameter.
+- [ ] **Verification:** Run a short test experiment and verify GPU utilization is active and efficient using a tool like `nvidia-smi`.
 
-## Objective 2 — Define the MDP and implement the simulation environment
+### Memory Optimization for Resource-Constrained Environments
 
-**Status:** Completed
+**Context:** During experimentation on a system with 16GB RAM and 16GB VRAM (compared to a 32GB RAM development environment), out-of-memory (OOM) issues were encountered. Analysis revealed that excessive RAM consumption was primarily due to high parallelization settings.
 
-**Details:**
-- The initial `ParametricDemandSimulator` is complete.
-- To create a higher-fidelity environment, a new ML-based simulator has been developed:
-    - A LightGBM model was trained to predict demand (`src/models/train_demand_model.py`).
-    - The model shows excellent performance on the validation set (R² > 0.99).
-    - A new `MLDemandSimulator` class was added to `src/envs/simulators.py`.
-- The `PriceEnv` has been updated to integrate the `MLDemandSimulator`, including constructing the proper feature vector, ensuring feature scaling consistency, handling out-of-bound predictions, and passing the environment's random generator for reproducible stochasticity.
-- The core environment logic has been thoroughly validated, covering the Markov property of state transitions, episode termination and reset mechanisms, and the accuracy of reward calculation.
-- The `config.yaml` has been refactored to allow for dynamic selection between `parametric` and `ml` simulators.
-- **Feature Selection for Demand Model:** Through an iterative process of training and feature importance analysis, the feature set for the demand model was significantly optimized. It was discovered that the 30 `PROD_CATEGORY` features were redundant and could be removed without any meaningful loss in model performance. The final model uses a lean set of **18 features** while maintaining an R² of ~0.9945, providing a highly accurate simulation and an efficient state space for the DRL agent.
+**Root Causes Identified:**
+-   **High `n_envs` in Experiment Configurations:** Baseline configurations for DQN (`dqn_baseline.yaml`) and PPO (`ppo_baseline.yaml`) used `n_envs` values of 4 and 16 respectively. When `n_envs > 1`, `stable-baselines3` utilizes `SubprocVecEnv`, spawning a separate Python process for each environment. Each process contributes its own memory footprint (Python interpreter overhead, environment data, etc.), leading to rapid RAM exhaustion, especially with 16 parallel processes.
+-   **Large DQN Replay Buffer:** The `buffer_size` of `1,000,000` for DQN in `dqn_baseline.yaml` demanded significant system RAM to store past experiences.
+-   **Parallel Hyperparameter Optimization:** The `optimize_agent.py` script's default `n_jobs=2` for Optuna trials meant that multiple `train_agent.py` processes were launched concurrently, further exacerbating memory pressure.
 
-**Optimality Assessment:**
-- The simulation environment is now upgraded to a more realistic, data-driven model, which will allow for the training of more robust and effective DRL agents. The state space has been optimized for DRL learning efficiency.
+**Solutions Implemented (December 2, 2025):**
+-   **Reduced `n_envs`:**
+    -   `configs/experiments/dqn_baseline.yaml`: `n_envs` reduced from `4` to `1`.
+    -   `configs/experiments/ppo_baseline.yaml`: `n_envs` reduced from `16` to `1`.
+    *Rationale:* This ensures individual training runs utilize only one environment instance, drastically lowering memory consumption per training job.
+-   **Reduced DQN `buffer_size`:**
+    -   `configs/experiments/dqn_baseline.yaml`: `buffer_size` reduced from `1,000,000` to `100,000`.
+    *Rationale:* Significantly cuts down RAM usage for the DQN agent's experience replay buffer.
 
-## Objective 3 — Implement and train DRL agents (DQN and PPO)
-
-**Status:** Completed
-
-**Details:**
-- A robust experimental workflow has been established to facilitate scientific evaluation of DRL methods.
-- **Configuration Management:** A `configs` directory now separates a `base_config.yaml` from experiment-specific configurations (e.g., `dqn_baseline.yaml`), allowing for clear, modular, and reproducible experiment definitions.
-- **Experiment Runner:** A new master script, `run_experiment.py`, automates the experimental process. It merges configurations, creates unique timestamped output directories for all artifacts (models, logs, configs), and calls the training logic.
-- **Modular Training:** The core logic in `src/models/train_agent.py` has been refactored into a `train` function that accepts a configuration object and an output directory, making it a reusable component of the experimental framework.
-- This new structure enables systematic tracking of metrics, comparison of different algorithms, and effortless testing of various hyperparameter setups, fulfilling a key requirement for rigorous scientific investigation.
-
-### Sub-Objective 3.1 — Hyperparameter Optimization
-
-**Status:** Completed (Initial Phase)
-
-**Details:**
-- A dedicated script, `optimize_agent.py`, has been created to automate hyperparameter tuning using Optuna.
-- Search spaces have been defined for DQN, PPO, and the newly added SAC agent, allowing for comprehensive tuning of all three.
-- Initial optimization studies have been successfully executed for DQN (discrete space), PPO (discrete space), and SAC (continuous space).
-- The results, including best-performing parameters, per-trial logs, and trained models, are systematically saved into unique study directories within the `models/` folder.
+**Recommendations for Future Experiments and Hyperparameter Optimization:**
+-   **Limit Optuna Parallelization:** When running `optimize_agent.py`, always explicitly set `--n-jobs 1` (or a very low number if system resources permit) to prevent concurrent `train_agent.py` processes. Example:
+    ```bash
+    python optimize_agent.py --agent dqn --n-trials 20 --n-jobs 1
+    ```
+-   **Monitor GPU Usage:** Regularly use `nvidia-smi` during training to confirm that the GPU is actively utilized and VRAM is being managed effectively. Although `device: cuda` is configured, computations can silently fall back to CPU if GPU resources are not correctly accessed, leading to system RAM pressure.
+-   **Further Parameter Tuning (if needed):** If OOM issues persist, consider reducing `batch_size` (e.g., from 4096) and, for DQN, exploring smaller `buffer_size` values within the Optuna search space (e.g., `10,000` to `50,000`).
 
 **Optimality Assessment:**
-- The project is now fully equipped for large-scale, automated hyperparameter optimization. The framework is robust, reproducible, and provides a clear path for identifying the best possible agent for the final evaluation. The initial runs have validated the process and provided strong baseline parameters.
-
-## Objective 4 — Evaluation and comparison
-
-**Status:** Completed
-
-**Details:**
-- The evaluation plan has been streamlined to focus on simple, reliable baselines: `HistoricalPolicy` and `RuleBasedPolicy`, which have been implemented in `src/baselines.py`.
-- The `src/evaluation.py` script was refactored into a reusable module for evaluating a single policy on an environment.
-- A new orchestrator script, `run_evaluation.py`, has been created to manage the full evaluation campaign. This script handles:
-    - Loading trained DRL agents and baseline policies.
-    - Iterating through all relevant products (with an option to limit products for testing via `--num_products`).
-    - Running each policy on the test environment.
-    - Calculating a comprehensive suite of business and operational KPIs, including: **Total Revenue, Total Units Sold, Average Price, Price Volatility, Average Daily Revenue, and Total Number of Price Changes.**
-    - **Bootstrapping has been implemented to obtain 95% confidence intervals for all calculated KPIs, providing statistical rigor to the performance comparisons.**
-    - Saving the aggregated KPI results to `reports/tables/evaluation_summary.csv` and the detailed daily results to `reports/tables/detailed_evaluation_results.csv`.
-- Finally, **code for the `notebooks/02-Evaluation.ipynb` has been provided** to load these saved results, perform further analysis, and generate visualizations (bar charts for KPIs with CIs and time series plots for price/units/revenue for sample products).
-- This setup validates that the core components (environment, DRL agent, baselines, and evaluation loop) are all functioning correctly together and generating comprehensive metrics with statistical confidence, which can then be thoroughly analyzed and visualized.
-
-**Optimality Assessment:**
-- The project now has a robust, modular, and complete framework for policy evaluation. It is capable of generating a rich set of metrics across multiple products and policies, along with their 95% confidence intervals. The evaluation outputs are structured for comprehensive analysis and visualization in the provided Jupyter notebook, fulfilling all requirements for rigorous scientific investigation and reporting.
+- These changes address the immediate OOM issues by significantly reducing the memory footprint of individual training runs and parallel optimization trials. While some parallel training benefits are reduced, stability on resource-constrained hardware is prioritized, enabling successful completion of experiments. Further tuning can be explored as hardware capabilities improve.

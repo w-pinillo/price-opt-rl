@@ -256,3 +256,18 @@ To provide a comprehensive evaluation of the DRL pricing agents by answering thr
 *   **Weeks 3–4**: Implement Gym environment and parametric demand simulator; run sanity checks.
 *   **Weeks 5–7**: Implement and train DQN and PPO prototypes; tune hyperparameters.
 *   **Week 8**: Full evaluation, sensitivity analysis, visualization and write-up.
+
+## Objective 5 - Hardware Acceleration and Experimentation
+
+### Goal
+Configure the project and system environment to leverage a powerful desktop with a dedicated NVIDIA GPU (Ryzen 7 9700X, RTX 5060 Ti 16GB) to accelerate training and hyperparameter tuning.
+
+### To-Do List
+
+- [ ] **Environment Setup:** Install NVIDIA drivers, CUDA Toolkit, and cuDNN.
+- [ ] **Python Dependencies:** Create a Python virtual environment and install the GPU-enabled version of PyTorch.
+- [ ] **Configuration:** Add a `device: cuda` parameter to `configs/base_config.yaml`.
+- [ ] **Code Modification:** Modify `src/models/train_agent.py` to use the new `device` configuration.
+- [ ] **Performance Tuning:** Increase `n_envs`, `batch_size`, and `buffer_size` in experiment configs to better utilize the hardware.
+- [ ] **Parallelization:** Update `optimize_agent.py` to run Optuna trials in parallel by setting the `n_jobs` parameter.
+- [ ] **Verification:** Run a short test experiment and verify GPU utilization is active and efficient using a tool like `nvidia-smi`.

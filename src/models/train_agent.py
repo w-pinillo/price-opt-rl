@@ -3,6 +3,7 @@ import os
 import polars as pl
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.env_util import make_vec_env, SubprocVecEnv, DummyVecEnv
 import importlib
 
 from src.utils import seed_everything, make_env
@@ -39,14 +40,22 @@ def train(config: dict, run_dir: str):
 
     # --- 3. Create training and evaluation environments ---
     product_id = config['training']['product_id']
-    print(f"Creating environment for product: {product_id}")
-    
-    # Monitor wraps the envs to log rewards and episode lengths
-    env = make_env(data, config, product_id)
-    env = Monitor(env, os.path.join(run_dir, "train_monitor.csv") )
+    n_envs = config['training'].get('n_envs', 1)
+    print(f"Creating environment for product: {product_id} with {n_envs} parallel instance(s).")
 
+    # Use make_vec_env to create vectorized environments for training
+    env = make_vec_env(
+        env_id=make_env,
+        n_envs=n_envs,
+        env_kwargs={'data': data, 'config': config, 'product_id': product_id},
+        monitor_dir=os.path.join(run_dir, "train_monitor"),
+        # Use SubprocVecEnv for multiple processes, DummyVecEnv for a single process
+        vec_env_cls=SubprocVecEnv if n_envs > 1 else DummyVecEnv
+    )
+
+    # Evaluation environment remains a single, separate instance for consistency
     eval_env = make_env(data, config, product_id)
-    eval_env = Monitor(eval_env, os.path.join(run_dir, "eval_monitor.csv") )
+    eval_env = Monitor(eval_env, os.path.join(run_dir, "eval_monitor.csv"))
 
     # --- 4. Define Callbacks ---
     eval_callback = EvalCallback(
@@ -78,6 +87,7 @@ def train(config: dict, run_dir: str):
         env,
         verbose=1,
         tensorboard_log=os.path.join(run_dir, 'tensorboard_log'),
+        device=config['training']['device'],
         **agent_config
     )
 
