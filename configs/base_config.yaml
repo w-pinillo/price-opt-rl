@@ -32,7 +32,6 @@ training:
   seed: 42
   device: "cuda" # "cuda" to use GPU, "cpu" for CPU
   n_envs: 1 # Number of parallel environments
-  product_id: "PRD0904358" # Product to train on
 
 # Cross-cutting Configuration
 paths:

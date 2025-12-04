@@ -54,7 +54,13 @@ def aggregate_daily(lazy_df: pl.LazyFrame, product_ids: list) -> pl.DataFrame:
     """
     Aggregates transaction data to a daily level for selected products.
     """
-    product_daily = (
+    return aggregate_daily_lazy(lazy_df, product_ids).collect(streaming=True)
+
+def aggregate_daily_lazy(lazy_df: pl.LazyFrame, product_ids: list) -> pl.LazyFrame:
+    """
+    Lazily aggregates transaction data to a daily level for selected products.
+    """
+    return (
         lazy_df
         .filter(pl.col("PROD_CODE").is_in(product_ids))
         .with_columns(
@@ -66,19 +72,22 @@ def aggregate_daily(lazy_df: pl.LazyFrame, product_ids: list) -> pl.DataFrame:
             pl.sum("QUANTITY").alias("total_units"),
             pl.sum("SPEND").alias("total_sales"),
             pl.first("SHOP_WEEK").alias("SHOP_WEEK"),
-            # Removed pl.first("PROD_CATEGORY").alias("PROD_CATEGORY"),
         ])
         .sort(["SHOP_DATE", "PROD_CODE"])
-        .collect(streaming=True) # Use streaming for potentially large results
     )
-    return product_daily
 
 def generate_time_series_features(df: pl.DataFrame) -> pl.DataFrame:
     """
     Generates time-series features for the daily aggregated product data.
     """
+    return generate_time_series_features_lazy(df.lazy()).collect()
+
+def generate_time_series_features_lazy(lazy_df: pl.LazyFrame) -> pl.LazyFrame:
+    """
+    Lazily generates time-series features for the daily aggregated product data.
+    """
     # First, create intermediate time-based features
-    df_with_base_features = df.with_columns([
+    lazy_df_with_base_features = lazy_df.with_columns([
         pl.col("SHOP_DATE").dt.weekday().alias("day_of_week"), # Monday=1, Sunday=7
         pl.col("SHOP_DATE").dt.month().alias("month"),
         pl.col("SHOP_DATE").dt.year().alias("year"),
@@ -88,7 +97,7 @@ def generate_time_series_features(df: pl.DataFrame) -> pl.DataFrame:
     ])
 
     # Now, use the intermediate features to create the final feature set
-    df_with_all_features = df_with_base_features.with_columns([
+    lazy_df_with_all_features = lazy_df_with_base_features.with_columns([
         # Seasonality features (sin/cos transformations)
         (2 * np.pi * pl.col("day_of_week") / 7).sin().alias("day_of_week_sin"),
         (2 * np.pi * pl.col("day_of_week") / 7).cos().alias("day_of_week_cos"),
@@ -110,21 +119,21 @@ def generate_time_series_features(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("total_units").rolling_std(window_size=28).over("PROD_CODE").alias("rolling_std_28_units"),
         
         # Price change percentage
-        (pl.col("avg_price") / pl.col("avg_price").shift(1).over("PROD_CODE") - 1).alias("price_change_pct"),
+        ((pl.col("avg_price") / (pl.col("avg_price").shift(1).over("PROD_CODE") + 1e-6)) - 1)
+        .fill_nan(0.0)
+        .fill_inf(0.0)
+        .alias("price_change_pct"),
         
         # Days since last price change (simplified for now, assumes daily data)
         (pl.int_range(0, pl.count()).over("PROD_CODE") + 1).alias("days_since_price_change"),
 
         # Price position
         ((pl.col("avg_price") - pl.min("avg_price").over("PROD_CODE")) / 
-         (pl.max("avg_price").over("PROD_CODE") - pl.min("avg_price").over("PROD_CODE"))
-        ).alias("price_position"),
+         (pl.max("avg_price").over("PROD_CODE") - pl.min("avg_price").over("PROD_CODE") + 1e-6)
+        ).fill_nan(0.0).fill_inf(0.0).alias("price_position"),
     ])
     
-    # Removed one-hot encode product category
-    # df_with_all_features = df_with_all_features.to_dummies(columns=["PROD_CATEGORY"], separator="_", drop_first=False)
-    
-    return df_with_all_features
+    return lazy_df_with_all_features
 
 def temporal_split(df: pl.DataFrame, train_end_date: str, val_end_date: str) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """
@@ -139,7 +148,6 @@ def temporal_split(df: pl.DataFrame, train_end_date: str, val_end_date: str) -> 
     test_df = df.filter(pl.col("SHOP_DATE") > pl.lit(val_end_date).str.strptime(pl.Date, "%Y-%m-%d"))
 
     return train_df, val_df, test_df
-
 
 
 

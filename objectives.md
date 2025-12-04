@@ -80,7 +80,7 @@ Configure the project and system environment to leverage a powerful desktop with
 *   **Week 8**: Full evaluation, sensitivity analysis, visualization and write-up.
 
 ## Objective 6 - Implement a Multi-Product DRL Agent
-**Status: Not Started**
+**Status: In Progress**
 
 ### Goal
 Transition from a "one agent per product" training strategy to a single, unified DRL agent capable of learning an optimal pricing policy for all 100 products simultaneously. This approach aims to improve training efficiency, scalability, and foster knowledge sharing between products.
@@ -92,23 +92,56 @@ The current architecture trains an independent agent for each product. This is c
 The chosen strategy involves modifying the environment and the agent's perception of the state to make it "product-aware."
 
 1.  **Unified Data Handling:** The `PriceEnv` environment will be modified to accept the entire unfiltered dataset containing all products, rather than a pre-filtered, single-product DataFrame.
-2.  **State Space Modification:** The agent's observation space will be augmented to include the product identifier (`PROD_CODE`). This will be implemented as a one-hot encoded vector, allowing the agent to unambiguously distinguish which product it is making a decision for at any given time step.
+2.  **State Space Modification (Dict Observation & Embeddings):** The agent's observation space will be a `gymnasium.spaces.Dict` combining product and market features. The `PROD_CODE` will be mapped to a dense integer range `[0, ..., num_products-1]` and then fed through an `nn.Embedding` layer within a custom feature extractor. The embedding vector (initial dimension: 16) will be concatenated with the market features to form the final observation. A `product_registry.json` will be created during data prep to map raw `PROD_CODE`s to their corresponding indices.
 3.  **Episode Sampling:** The environment's `reset` method will be updated. At the beginning of each episode, it will randomly sample not only a starting time step but also a `PROD_CODE`, dedicating that episode to the selected product.
 4.  **Training Script Adaptation:**
     *   `src/models/train_agent.py`: The script will be updated to work with the new environment. The concept of a single `product_id` per run will be removed, as the agent now handles all products.
     *   `src/utils.py`: The `make_env` function will be simplified. It will no longer need to filter data for a specific product.
 
 ### Implementation To-Do List
-- [ ] **Environment (`PriceEnv`):**
-    - [ ] Modify `__init__` to handle the full, multi-product DataFrame.
-    - [ ] Create a mapping from `PROD_CODE` to a one-hot encoded vector.
-    - [ ] Update the `observation_space` to include the one-hot encoded product vector.
-    - [ ] Modify `reset()` to sample a `PROD_CODE` for each new episode.
-    - [ ] Update `_get_obs()` to include the one-hot encoded product vector in the observation.
-- [ ] **Training Pipeline:**
-    - [ ] Modify `src/utils.py`'s `make_env` to no longer filter by `product_id`.
-    - [ ] Modify `src/models/train_agent.py` to remove the `product_id` parameter and logic.
-    - [ ] Update experiment configuration files (`configs/experiments/*.yaml`) to remove the `product_id` parameter.
-- [ ] **Verification:**
-    - [ ] Run a training experiment with the new multi-product agent.
-    - [ ] Verify that the agent learns a reasonable policy and that the training process is more efficient.
+- [] **Environment (`PriceEnv`):**
+    - [] Modify `__init__` to handle the full, multi-product DataFrame.
+    - [] Create a mapping from `PROD_CODE` to a dense integer index.
+    - [] Update the `observation_space` to be a `Dict` including the product index and market features.
+    - [] Modify `reset()` to sample a `PROD_CODE` (and its corresponding index) for each new episode.
+    - [] Update `_get_obs()` to return a dictionary observation.
+- [] **Training Pipeline:**
+    - [] Modify `src/utils.py`'s `make_env` to no longer filter by `product_id`.
+    - [] Modify `src/models/train_agent.py` to remove the `product_id` parameter and logic, and to integrate the custom feature extractor.
+    - [] Update experiment configuration files (`configs/experiments/*.yaml`) to remove the `product_id` parameter and add configuration for the custom feature extractor (e.g., embedding_dim).
+- [] **Verification:**
+    - [] Run a training experiment with the new multi-product agent.
+    - [] Implement a **Tiered Evaluation Baseline**:
+        - [] **Tier 1 (Business Baseline):** Verify the agent beats `avg_daily_revenue` (or existing pricing logic).
+        - [] **Tier 2 (Architectural Baseline):** Compare the multi-product agent's performance against independent agents for 5 representative products (2 high-volume, 3 low-volume).
+    - [] Verify that the agent learns a reasonable policy and that the training process is efficient.
+
+### Evaluation Plan for Multi-Product Agent
+This plan outlines the steps to verify the functionality of the new multi-product agent architecture.
+
+#### Milestone 1: Data Refactoring Verification
+*   **Goal:** Verify that the `src/data_utils.py` script correctly generates the required data artifacts.
+**Status: Completed**
+
+#### Milestone 2: Environment Verification
+*   **Goal:** Verify that the `MultiProductPriceEnv` can be instantiated, reset, and stepped through correctly.
+**Status: Completed**
+
+#### Milestone 3: Training Pipeline Verification (Integration Test)
+*   **Goal:** Verify that a full training run can be launched with the new architecture without crashing.
+*   **Action:** Run the main training script for a small number of timesteps to ensure all components are integrated correctly.
+*   **Command Example:** `python run_experiment.py --config-path configs/base_config.yaml --experiment-config-path configs/experiments/ppo_baseline.yaml --run-name test_multiproduct_run --total-timesteps 1000`
+*   **Checks:**
+    *   The script starts and prints messages indicating the multi-product setup.
+    *   The `stable-baselines3` training progress bar is displayed.
+    *   The training run completes successfully and saves a final model.
+**Status: Completed**
+
+#### Milestone 4: Full Evaluation Verification
+*   **Goal:** Verify that the `evaluate_multi_product_agent.py` script can load a trained model and evaluate it.
+*   **Action:** Run the evaluation script on the test model generated in Milestone 3.
+*   **Command Example:** `python evaluate_multi_product_agent.py --agent-path models/test_multiproduct_run/final_model.zip --product-id PRD0904358 --config-path configs/base_config.yaml`
+*   **Checks:**
+    *   The script loads the agent and data without errors.
+    *   The evaluation loop runs for the specified number of episodes.
+    *   A final "Evaluation Summary" is printed, comparing the agent's revenue against the historical baseline.

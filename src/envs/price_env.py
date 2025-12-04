@@ -4,6 +4,7 @@ import numpy as np
 import polars as pl
 from sklearn.preprocessing import StandardScaler
 import os # Added for os.path.join
+from typing import Optional
 
 from src.envs.simulators import ParametricDemandSimulator, MLDemandSimulator
 from src.utils import load_scalers, apply_scalers # Import load_scalers and apply_scalers
@@ -22,14 +23,20 @@ class PriceEnv(gym.Env):
     """
     metadata = {"render_modes": ["human"], "render_fps": 30}
 
-    def __init__(self, data: pl.DataFrame, config: dict, render_mode=None): # Removed prod_category_cols
+    def __init__(self, data_registry: dict, product_mapper: dict, avg_daily_revenue_registry: dict, config: dict, render_mode=None):
         super().__init__()
 
-        self.df = data
+        self.data_registry = data_registry
+        self.product_mapper = product_mapper
+        self.avg_daily_revenue_registry = avg_daily_revenue_registry
         self.config = config
         
         self.action_type = self.config['env']['action_type']
         self.episode_horizon = self.config['env']['episode_horizon']
+        
+        # Current product details, set during reset
+        self.current_product_id = None 
+        self.current_product_df = None
 
         # Define all features that were scaled during data preparation
         self.all_scaled_features = [
@@ -43,7 +50,6 @@ class PriceEnv(gym.Env):
             "days_since_price_change", "price_position",
             "SHOP_WEEK"
         ]
-        # Removed self.all_scaled_features.extend(prod_category_cols)
 
         # Load all scalers
         self.scalers = load_scalers(self.config['paths']['scalers_dir'], self.all_scaled_features)
@@ -58,7 +64,6 @@ class PriceEnv(gym.Env):
             "rolling_std_7_units", "rolling_std_28_units",
             "price_change_pct", "days_since_price_change", "price_position"
         ]
-        # Removed self.feature_cols.extend(prod_category_cols)
         self.time_cols = ["day_of_week", "month", "year", "day_of_month", "week_of_year", "is_weekend"]
         
         # Features for the ML demand model (must match training features exactly)
@@ -102,37 +107,55 @@ class PriceEnv(gym.Env):
                 shape=(1,), dtype=np.float32
             )
 
-        # Adjusted observation_space shape
-        self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, 
-            shape=(len(self.feature_cols) + len(self.time_cols),), 
-            dtype=np.float32
-        )
+        # Adjusted observation_space shape to be a dictionary
+        self.observation_space = spaces.Dict({
+            "product_id": spaces.Discrete(len(self.product_mapper)), # Number of unique products
+            "features": spaces.Box(
+                low=-np.inf, high=np.inf, 
+                shape=(len(self.feature_cols) + len(self.time_cols),), 
+                dtype=np.float32
+            )
+        })
 
         self.render_mode = render_mode
         self.current_step = 0
         self.start_step = 0
 
     def _get_obs(self):
-        current_row = self.df.row(self.current_step, named=True)
+        current_row = self.current_product_df.row(self.current_step, named=True)
         obs_features = [current_row[col] for col in self.feature_cols + self.time_cols]
-        return np.array(obs_features, dtype=np.float32)
+        return {
+            "product_id": self.current_product_id,
+            "features": np.array(obs_features, dtype=np.float32)
+        }
 
     def _get_info(self):
-        current_row = self.df.row(self.current_step, named=True)
+        current_row = self.current_product_df.row(self.current_step, named=True)
         return {
             "date": current_row.get("SHOP_DATE"),
-            "product_id": current_row.get("PROD_CODE"),
+            "product_code": current_row.get("PROD_CODE"),
+            "product_id": self.current_product_id,
             "scaled_avg_price": current_row.get("avg_price"),
         }
 
-    def reset(self, seed=None, options=None, sequential: bool = False):
+    def reset(self, seed=None, options=None, product_id: Optional[str] = None, sequential: bool = False):
         super().reset(seed=seed)
+
+        if product_id is not None:
+            # If a specific product_id is provided, use it
+            if product_id not in self.product_mapper:
+                raise ValueError(f"Product ID {product_id} not found in product_mapper.")
+            self.current_product_id = self.product_mapper[product_id]
+        else:
+            # Otherwise, sample a random product
+            self.current_product_id = int(self.np_random.choice(list(self.data_registry.keys())))
+        
+        self.current_product_df = self.data_registry[self.current_product_id]
 
         if sequential:
             self.start_step = 0
         else:
-            max_start_step = len(self.df) - self.episode_horizon - 1
+            max_start_step = len(self.current_product_df) - self.episode_horizon - 1
             self.start_step = self.np_random.integers(0, max_start_step + 1) if max_start_step > 0 else 0
         
         self.current_step = self.start_step
@@ -142,7 +165,7 @@ class PriceEnv(gym.Env):
         return observation, info
 
     def step(self, action):
-        current_row = self.df.row(self.current_step, named=True)
+        current_row = self.current_product_df.row(self.current_step, named=True)
         
         # Inverse transform the current scaled avg_price to get the real price
         scaled_price = np.array(current_row["avg_price"]).reshape(-1, 1)
@@ -199,9 +222,9 @@ class PriceEnv(gym.Env):
         reward = new_price * units_sold
 
         self.current_step += 1
-        done = self.current_step >= (self.start_step + self.episode_horizon) or self.current_step >= len(self.df) -1
+        done = self.current_step >= (self.start_step + self.episode_horizon) or self.current_step >= len(self.current_product_df) -1
 
-        observation = self._get_obs() if not done else np.zeros(self.observation_space.shape)
+        observation = self._get_obs() if not done else { "product_id": self.current_product_id, "features": np.zeros(self.observation_space["features"].shape) }
         info = self._get_info() if not done else {}
         if not done:
             info["units_sold"] = units_sold

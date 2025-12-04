@@ -6,6 +6,7 @@ training:
 
 agent_params:
   dqn:
+    embedding_dim: 16
     learning_rate: 0.001
     buffer_size: 1000000
     learning_starts: 50000

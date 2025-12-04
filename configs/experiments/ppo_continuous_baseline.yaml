@@ -14,3 +14,4 @@ agent_params:
     gae_lambda: 0.95
     clip_range: 0.2
     ent_coef: 0.0
+    embedding_dim: 16

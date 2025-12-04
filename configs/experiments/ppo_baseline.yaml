@@ -1,12 +1,13 @@
 # configs/experiments/ppo_baseline.yaml
 agent: ppo
 training:
-  n_envs: 4
+  n_envs: 1
 agent_params:
   ppo:
+    embedding_dim: 16
     learning_rate: 0.0003
     n_steps: 2048
-    batch_size: 16384
+    batch_size: 1024
     n_epochs: 10
     gamma: 0.99
     gae_lambda: 0.95

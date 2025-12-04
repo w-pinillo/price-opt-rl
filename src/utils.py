@@ -6,7 +6,6 @@ import random
 import numpy as np
 import torch
 import gymnasium as gym
-# from src.envs.price_env import PriceEnv # Removed to break circular dependency
 
 def fit_save_scalers(df: pl.DataFrame, feature_cols: list, output_path: str, scaler_type: str = "StandardScaler"):
     """
@@ -71,23 +70,17 @@ def seed_everything(seed: int):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-def make_env(data: pl.DataFrame, config: dict, product_id: int):
+def make_multi_product_env(data_registry: dict, product_mapper: dict, avg_daily_revenue_registry: dict, config: dict):
     """
-    Creates, configures, and returns the pricing environment for a given product.
+    Creates, configures, and returns the multi-product pricing environment.
     """
     # Import PriceEnv locally to avoid circular dependency
     from src.envs.price_env import PriceEnv
 
-    # Filter data for the specific product
-    product_data = data.filter(pl.col("PROD_CODE") == product_id)
-    
-    # Dynamically get PROD_CATEGORY columns
-    # prod_category_cols = [col for col in product_data.columns if col.startswith("PROD_CATEGORY_")] # Removed
-
-    # Create the environment
     env = PriceEnv(
-        data=product_data,
+        data_registry=data_registry,
+        product_mapper=product_mapper,
+        avg_daily_revenue_registry=avg_daily_revenue_registry,
         config=config,
-        # Removed prod_category_cols=prod_category_cols
     )
     return env
