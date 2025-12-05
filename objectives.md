@@ -47,22 +47,25 @@ Configure the project and system environment to leverage a powerful desktop with
 
 ### Notes on Memory Optimization (from previous work)
 
-**Context:** During experimentation on a system with 16GB RAM and 16GB VRAM (compared to a 32GB RAM development environment), out-of-memory (OOM) issues were encountered. Analysis revealed that excessive RAM consumption was primarily due to high parallelization settings.
+**Context:** During experimentation on a system with 16GB RAM, initial out-of-memory (OOM) issues were encountered due to high parallelization settings and an inefficient data pipeline.
 
-**Solutions Implemented (December 2, 2025):**
--   **Reduced `n_envs`:**
-    -   `configs/experiments/dqn_baseline.yaml`: `n_envs` reduced from `4` to `1`.
-    -   `configs/experiments/ppo_baseline.yaml`: `n_envs` reduced from `16` to `1`.
--   **Reduced DQN `buffer_size`:**
-    -   `configs/experiments/dqn_baseline.yaml`: `buffer_size` reduced from `1,000,000` to `100,000`.
+**Solutions Implemented:**
+-   **Reduced Parallelism (December 2, 2025):** `n_envs` and `buffer_size` were reduced in baseline experiment configs.
+-   **Data Pipeline Refactoring (December 5, 2025):** The pipeline was refactored to optionally bypass raw data processing and load a pre-aggregated daily dataset directly. This was controlled by a `use_pre_aggregated_data` flag in `configs/base_config.yaml`.
+
+**Current Status (December 5, 2025):**
+- **Resolved:** The critical Out-Of-Memory (OOM) blocker related to the data pipeline has been resolved. By using the pre-aggregated data option, the pipeline runs efficiently on memory-constrained systems.
+
+**Criticality:**
+- With the data pipeline unblocked, there are no longer critical memory-related impediments to proceeding with agent training and evaluation.
 
 **Recommendations for Future Experiments and Hyperparameter Optimization:**
--   **Limit Optuna Parallelization:** When running `optimize_agent.py`, always explicitly set `--n-jobs 1` (or a very low number if system resources permit) to prevent concurrent `train_agent.py` processes. Example:
-    ```bash
-    python optimize_agent.py --agent dqn --n-trials 20 --n-jobs 1
-    ```
--   **Monitor GPU Usage:** Regularly use `nvidia-smi` during training to confirm that the GPU is actively utilized and VRAM is being managed effectively.
--   **Further Parameter Tuning (if needed):** If OOM issues persist, consider reducing `batch_size` (e.g., from 4096) and, for DQN, exploring smaller `buffer_size` values within the Optuna search space (e.g., `10,000` to `50,000`).
+-   **Limit Optuna Parallelization:** When running `optimize_agent.py`, it is still advisable to explicitly set `--n-jobs 1` to prevent excessive memory use from concurrent training processes.
+-   **Monitor GPU Usage:** Regularly use `nvidia-smi` during training to confirm that the GPU is actively utilized.
+
+**Next Steps:**
+- Proceed with the remaining tasks in the Objective 5 to-do list (Code Modification, Performance Tuning, etc.).
+- The immediate priority is now **Milestone 4 of Objective 6**: running the full evaluation for the multi-product agent.
 
 ## Cross-cutting tasks (reproducibility, documentation, deliverables)
 

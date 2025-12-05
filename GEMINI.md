@@ -53,3 +53,37 @@ This file contains a log of significant events, decisions, and outcomes that occ
 
 **Outcome:**
 - The training pipeline now runs successfully without crashing, completing the integration test for the multi-product DRL agent. This resolves all major tensor shape and dimension mismatches encountered during the integration phase.
+
+---
+
+## Data Pipeline Memory Issue Recurrence (December 4, 2025)
+
+**Context:** Following the implementation of memory optimization solutions for the data pipeline (detailed in `PROGRESS_LOG.md` on December 4, 2025), an attempt to re-run `src/pipeline.py` resulted in a critical Out-Of-Memory (OOM) error, causing a VSCode shutdown.
+
+**Issue Identified:** Despite previous efforts to refactor `src/features.py` and `src/pipeline.py` to use lazy processing with Polars `LazyFrame` objects, and explicit deletion of DataFrames with garbage collection, the data pipeline continues to exhaust available RAM on resource-constrained systems (e.g., 16GB RAM). This indicates that the current memory optimization strategies are insufficient to handle the dataset size and processing requirements without OOM errors.
+
+**Impact:** The inability to successfully run the data pipeline due to persistent OOM errors is a critical blocker for further development, including proceeding with the diagnosis of `nan` values and subsequent agent training.
+
+**Next Steps:** Thoroughly investigate the current memory consumption patterns during pipeline execution to identify remaining bottlenecks. Further optimization of data loading, processing, and memory management is required before proceeding with other tasks.
+
+---
+
+## Data Pipeline Refactoring to Resolve OOM Errors (December 5, 2025)
+
+**Context:** The data pipeline continued to fail with Out-Of-Memory (OOM) errors on a 16GB RAM machine, even after implementing lazy processing with Polars. The root cause remained the initial loading and aggregation of the 307M-row raw transaction dataset, which was too memory-intensive for the hardware.
+
+**Solution Implemented:**
+-   **Introduced Configurable Data Source:** A new `data_config` section was added to `configs/base_config.yaml`.
+    -   `use_pre_aggregated_data` (boolean): A flag to switch between processing raw data and using a pre-generated, aggregated file.
+    -   `pre_aggregated_data_path` (string): Path to the aggregated dataset (`data/processed/top100_daily.parquet`).
+-   **Refactored `src/pipeline.py`:**
+    -   The script now reads the `use_pre_aggregated_data` flag.
+    -   If `true`, the pipeline bypasses the memory-intensive raw data loading, product selection, and daily aggregation steps entirely. It starts directly by loading the `top100_daily.parquet` file.
+    -   If `false`, the original (but OOM-prone) raw data processing logic is executed, providing backward compatibility.
+-   **Polars API Corrections:** Several minor bugs in the Polars-based feature generation code were fixed, including incorrect method calls (`.fill_inf`, `.suffix`) that caused errors during the pipeline run.
+
+**Outcome:**
+- The critical OOM blocker has been **resolved**. By setting `use_pre_aggregated_data: true`, the data pipeline now runs successfully and efficiently on resource-constrained (16GB RAM) systems, generating the necessary train, validation, and test datasets without issue.
+
+**Next Steps:**
+- With the data pipeline now stable, the project can proceed with **Milestone 4 of Objective 6**: the full evaluation of the multi-product agent.

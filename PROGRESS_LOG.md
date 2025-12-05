@@ -26,26 +26,17 @@
 
 ---
 
-### Memory Optimization for Data Pipeline (December 4, 2025)
+### Data Pipeline Refactoring to Resolve OOM Errors (December 5, 2025)
 
-**Context:** During an attempt to run the `src/pipeline.py` script on a desktop with 16GB RAM, an Out-Of-Memory (OOM) error occurred. The pipeline was originally developed on a machine with 32GB RAM without memory constraints.
+**Context:** The data pipeline was critically blocked by persistent Out-Of-Memory (OOM) errors on 16GB RAM systems. Even after implementing a lazy-loading strategy with Polars, the initial processing of the 307M-row raw transaction file remained too memory-intensive.
 
-**Root Cause Identified:**
-- The original `src/pipeline.py` loaded and processed the entire dataset in memory, specifically materializing a large DataFrame after daily aggregation and before feature generation, leading to excessive RAM consumption.
-
-**Solutions Implemented:**
--   **Refactored `src/features.py`:** Introduced lazy versions of `aggregate_daily` (`aggregate_daily_lazy`) and `generate_time_series_features` (`generate_time_series_features_lazy`) to operate on and return Polars `LazyFrame` objects, deferring computation.
--   **Refactored `src/pipeline.py`:**
-    *   Modified the pipeline to leverage the lazy functions, constructing a full lazy computation graph.
-    *   Implemented sequential processing of the train, validation, and test sets. For each set:
-        1.  Only the relevant data slice is collected from the lazy frame (`.collect(streaming=True)`).
-        2.  NaNs are dropped, scalers are applied (fitting on training, loading for validation/test), and the processed data is saved to a parquet file.
-        3.  Crucially, the in-memory DataFrame for the current split is explicitly deleted (`del df`) and garbage collection (`gc.collect()`) is triggered to free up RAM before processing the next split.
--   **Corrected `load_scalers` call:** Fixed argument order for `load_scalers(scalers_dir, feature_cols)` in `src/pipeline.py` to correctly load previously fitted scalers.
+**Solution Implemented:**
+-   **Configurable Data Source:** The pipeline was refactored to support a configurable data source. A new flag, `use_pre_aggregated_data`, was added to `configs/base_config.yaml`.
+-   **Bypassing Raw Processing:** When `use_pre_aggregated_data` is set to `true`, the pipeline now completely bypasses the memory-heavy raw data loading and aggregation steps. Instead, it loads a pre-aggregated daily dataset (`data/processed/top100_daily.parquet`) directly, starting the process from the feature generation stage.
+-   **Bug Fixes:** Several minor bugs related to the Polars API in `src/features.py` and `src/pipeline.py` were identified and fixed during the process.
 
 **Outcome:**
-- These changes significantly reduce the peak memory usage of the data pipeline, allowing it to run successfully on systems with limited RAM (e.g., 16GB). The pipeline now processes data in a memory-efficient, chunk-based manner.
+- **Critical Blocker Resolved:** The data pipeline now runs successfully on memory-constrained systems without OOM errors. This unblocks all further development and evaluation tasks that depend on the generated datasets.
 
 **Next Steps:**
-- Re-run the data pipeline to confirm successful execution without OOM errors.
-- Then, proceed with diagnosing the `nan` values in the actual training data as previously planned.
+- With the data pipeline now stable and efficient, we will proceed with the next primary objective: **Milestone 4: Full Evaluation Verification** for the multi-product DRL agent (Objective 6).

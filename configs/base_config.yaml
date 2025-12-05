@@ -34,6 +34,10 @@ training:
   n_envs: 1 # Number of parallel environments
 
 # Cross-cutting Configuration
+data_config:
+  use_pre_aggregated_data: true # Set to true to use the pre-aggregated daily data
+  pre_aggregated_data_path: data/processed/top100_daily.parquet
+
 paths:
   raw_data: data/transactions.parquet
   processed_data_dir: data/processed

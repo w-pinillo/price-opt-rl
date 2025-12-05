@@ -42,6 +42,7 @@ nvidia-nvjitlink==13.0.39
 nvidia-nvshmem-cu13==3.3.24
 nvidia-nvtx==13.0.39
 nvidia-pyindex==1.0.9
+omegaconf==2.3.0 # Added omegaconf
 optuna==4.6.0
 packaging==25.0
 pandas==2.3.3

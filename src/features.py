@@ -9,8 +9,8 @@ def select_top_products(lazy_df: pl.LazyFrame, n: int = 100, output_path: str = 
     Selects the top N products based on total sales after filtering out products
     with missing days. Saves the list of top product IDs to a JSON file.
     """
-    # Filter products without missing days
-    products_no_missing_list = (
+    # Create a LazyFrame of PROD_CODEs that do not have missing days
+    products_no_missing_lazy = (
         lazy_df
         .group_by("PROD_CODE")
         .agg([
@@ -26,14 +26,20 @@ def select_top_products(lazy_df: pl.LazyFrame, n: int = 100, output_path: str = 
         )
         .filter(pl.col("missing_days") == 0)
         .select("PROD_CODE")
-        .collect()
-        .to_series()
-        .to_list()
     )
+    
+    # NEW STEP: Cache this intermediate result to disk to reduce memory pressure
+    temp_products_no_missing_path = os.path.join(output_path, "temp_products_no_missing.parquet")
+    print(f"Caching intermediate products_no_missing_lazy to {temp_products_no_missing_path}...")
+    products_no_missing_lazy.sink_parquet(temp_products_no_missing_path)
+    # Read it back lazily
+    products_no_missing_lazy_from_disk = pl.scan_parquet(temp_products_no_missing_path)
 
-    lazy_df_filtered = lazy_df.filter(pl.col("PROD_CODE").is_in(products_no_missing_list))
+    # Filter the main lazy_df by semi-joining with products_no_missing_lazy_from_disk
+    lazy_df_filtered = lazy_df.semi_join(products_no_missing_lazy_from_disk, on="PROD_CODE")
 
-    # Create a list of the top N products by sales
+    # Create a list of the top N products by sales from the filtered lazy_df
+    # This collect is on a very small DataFrame (N rows)
     top_products_list = (
         lazy_df_filtered
         .group_by("PROD_CODE")
@@ -41,7 +47,7 @@ def select_top_products(lazy_df: pl.LazyFrame, n: int = 100, output_path: str = 
         .sort("total_sales", descending=True)
         .limit(n)
         .select("PROD_CODE")
-        .collect()
+        .collect() # This collection is intentional as the list is small (N=100)
         .to_series()
         .to_list()
     )
@@ -50,11 +56,8 @@ def select_top_products(lazy_df: pl.LazyFrame, n: int = 100, output_path: str = 
 
     return top_products_list
 
-def aggregate_daily(lazy_df: pl.LazyFrame, product_ids: list) -> pl.DataFrame:
-    """
-    Aggregates transaction data to a daily level for selected products.
-    """
-    return aggregate_daily_lazy(lazy_df, product_ids).collect(streaming=True)
+# Removed: aggregate_daily as it contained a .collect() call.
+# The pipeline should use aggregate_daily_lazy directly.
 
 def aggregate_daily_lazy(lazy_df: pl.LazyFrame, product_ids: list) -> pl.LazyFrame:
     """
@@ -76,11 +79,8 @@ def aggregate_daily_lazy(lazy_df: pl.LazyFrame, product_ids: list) -> pl.LazyFra
         .sort(["SHOP_DATE", "PROD_CODE"])
     )
 
-def generate_time_series_features(df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Generates time-series features for the daily aggregated product data.
-    """
-    return generate_time_series_features_lazy(df.lazy()).collect()
+# Removed: generate_time_series_features as it contained a .collect() call.
+# The pipeline should use generate_time_series_features_lazy directly.
 
 def generate_time_series_features_lazy(lazy_df: pl.LazyFrame) -> pl.LazyFrame:
     """
@@ -121,7 +121,7 @@ def generate_time_series_features_lazy(lazy_df: pl.LazyFrame) -> pl.LazyFrame:
         # Price change percentage
         ((pl.col("avg_price") / (pl.col("avg_price").shift(1).over("PROD_CODE") + 1e-6)) - 1)
         .fill_nan(0.0)
-        .fill_inf(0.0)
+        .pipe(lambda expr: pl.when(expr.is_infinite()).then(0.0).otherwise(expr)) # Handle infinite values
         .alias("price_change_pct"),
         
         # Days since last price change (simplified for now, assumes daily data)
@@ -130,24 +130,13 @@ def generate_time_series_features_lazy(lazy_df: pl.LazyFrame) -> pl.LazyFrame:
         # Price position
         ((pl.col("avg_price") - pl.min("avg_price").over("PROD_CODE")) / 
          (pl.max("avg_price").over("PROD_CODE") - pl.min("avg_price").over("PROD_CODE") + 1e-6)
-        ).fill_nan(0.0).fill_inf(0.0).alias("price_position"),
+        )
+        .fill_nan(0.0)
+        .pipe(lambda expr: pl.when(expr.is_infinite()).then(0.0).otherwise(expr)) # Handle infinite values
+        .alias("price_position"),
     ])
     
     return lazy_df_with_all_features
-
-def temporal_split(df: pl.DataFrame, train_end_date: str, val_end_date: str) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
-    """
-    Splits the DataFrame into training, validation, and test sets based on dates.
-    Dates should be in 'YYYY-MM-DD' format.
-    """
-    train_df = df.filter(pl.col("SHOP_DATE") <= pl.lit(train_end_date).str.strptime(pl.Date, "%Y-%m-%d"))
-    val_df = df.filter(
-        (pl.col("SHOP_DATE") > pl.lit(train_end_date).str.strptime(pl.Date, "%Y-%m-%d")) &
-        (pl.col("SHOP_DATE") <= pl.lit(val_end_date).str.strptime(pl.Date, "%Y-%m-%d"))
-    )
-    test_df = df.filter(pl.col("SHOP_DATE") > pl.lit(val_end_date).str.strptime(pl.Date, "%Y-%m-%d"))
-
-    return train_df, val_df, test_df
 
 
 
