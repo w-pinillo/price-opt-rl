@@ -191,7 +191,6 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
             
             while not done:
                 action, _states = agent.predict(obs, deterministic=True)
-                # Correctly unpack 4 values from VecEnv.step()
                 obs, reward, dones, info_list = eval_env.step([action]) 
 
                 done = dones[0] # Get the done status for the single environment

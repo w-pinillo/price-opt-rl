@@ -79,9 +79,9 @@ def make_multi_product_env(data_registry: dict, product_mapper: dict, avg_daily_
 
     env = MultiProductPriceEnv(
         data_registry=data_registry,
+        raw_data_df=raw_data_df,
         product_mapper=product_mapper,
         config=config,
-        raw_data_df=raw_data_df,
         historical_avg_prices=historical_avg_prices,
         avg_daily_revenue_registry=avg_daily_revenue_registry
     )
