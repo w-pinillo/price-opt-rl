@@ -17,3 +17,5 @@ agent_params:
     train_freq: 4
     gradient_steps: 1
     target_update_interval: 1000
+    policy_kwargs:
+      net_arch: [256, 256] # Two hidden layers with 256 units each
