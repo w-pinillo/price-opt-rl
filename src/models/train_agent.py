@@ -40,6 +40,19 @@ def train(config: dict, run_dir: str):
         output_path=registry_output_path
     )
 
+    # --- 2b. Load Raw Data for Environment ---
+    if config['data_config']['use_pre_aggregated_data']:
+        raw_data_df = pl.read_parquet(config['data_config']['pre_aggregated_data_path'])
+    else:
+        # This is a fallback and might not be suitable for large datasets
+        # that cause OOM issues. The primary path is the pre-aggregated one.
+        raw_data_df = pl.read_parquet(config['paths']['raw_data'])
+
+    historical_median_prices = raw_data_df.group_by("PROD_CODE").agg(
+        pl.median("avg_price").alias("historical_median_price")
+    ).to_pandas().set_index("PROD_CODE")['historical_median_price'].to_dict()
+
+
     # --- 3. Create training and evaluation environments ---
     n_envs = config['training'].get('n_envs', 1)
     print(f"Creating {n_envs} parallel multi-product environment(s).")
@@ -51,13 +64,22 @@ def train(config: dict, run_dir: str):
             'data_registry': data_registry, 
             'product_mapper': product_mapper, 
             'avg_daily_revenue_registry': avg_daily_revenue_registry,
-            'config': config
+            'config': config,
+            'raw_data_df': raw_data_df,
+            'historical_avg_prices': historical_median_prices
         },
         monitor_dir=os.path.join(run_dir, "train_monitor"),
         vec_env_cls=SubprocVecEnv if n_envs > 1 else DummyVecEnv
     )
 
-    eval_env = make_multi_product_env(data_registry, product_mapper, avg_daily_revenue_registry, config)
+    eval_env = make_multi_product_env(
+        data_registry, 
+        product_mapper, 
+        avg_daily_revenue_registry, 
+        config, 
+        raw_data_df, 
+        historical_median_prices
+    )
     eval_env = Monitor(eval_env, os.path.join(run_dir, "eval_monitor.csv"))
 
     # --- 4. Define Callbacks ---

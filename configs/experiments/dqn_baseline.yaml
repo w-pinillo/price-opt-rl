@@ -2,17 +2,18 @@
 agent: dqn
 
 training:
-  n_envs: 4
+  n_envs: 1
+  agent: "DQN" # Explicitly set agent for training to DQN
 
 agent_params:
   dqn:
     embedding_dim: 16
     learning_rate: 0.001
-    buffer_size: 1000000
-    learning_starts: 50000
-    batch_size: 16384
+    buffer_size: 100000
+    learning_starts: 10000
+    batch_size: 1024
     tau: 1.0
     gamma: 0.99
     train_freq: 4
     gradient_steps: 1
-    target_update_interval: 10000
+    target_update_interval: 1000
