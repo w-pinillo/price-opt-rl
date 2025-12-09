@@ -23,20 +23,23 @@ class PriceEnv(gym.Env):
     """
     metadata = {"render_modes": ["human"], "render_fps": 30}
 
-    def __init__(self, data_registry: dict, product_mapper: dict, avg_daily_revenue_registry: dict, config: dict, render_mode=None):
+    def __init__(self, data_registry: dict, product_mapper: dict, avg_daily_revenue_registry: dict, config: dict, raw_data_df: pl.DataFrame, historical_avg_prices: dict, render_mode=None):
         super().__init__()
 
         self.data_registry = data_registry
+        self.raw_data_df = raw_data_df # Full raw DataFrame for ground truth
         self.product_mapper = product_mapper
         self.avg_daily_revenue_registry = avg_daily_revenue_registry
         self.config = config
+        self.historical_avg_prices = historical_avg_prices # For fixed cost calculation
         
         self.action_type = self.config['env']['action_type']
         self.episode_horizon = self.config['env']['episode_horizon']
         
         # Current product details, set during reset
         self.current_product_id = None 
-        self.current_product_df = None
+        self.current_product_df = None # Scaled data for observation
+        self.current_raw_product_df = None # Raw data for ground truth calculations
 
         # Define all features that were scaled during data preparation
         self.all_scaled_features = [
@@ -69,7 +72,7 @@ class PriceEnv(gym.Env):
         # Features for the ML demand model (must match training features exactly)
         # Dynamically construct this list based on all_scaled_features and exclusions
         ml_model_exclusions = [
-            "SHOP_DATE", "PROD_CODE", "total_units", "total_sales", 
+            "SHOP_DATE", "product_id", "total_units", "total_sales", 
             "day_of_week", "month", "year", "day", "is_weekend"
         ]
         self.feature_cols_ml_model = [
@@ -133,7 +136,7 @@ class PriceEnv(gym.Env):
         current_row = self.current_product_df.row(self.current_step, named=True)
         return {
             "date": current_row.get("SHOP_DATE"),
-            "product_code": current_row.get("PROD_CODE"),
+            "product_code": self.current_raw_product_id_str, # Use the stored raw product ID string
             "product_id": self.current_product_id,
             "scaled_avg_price": current_row.get("avg_price"),
         }
@@ -145,17 +148,25 @@ class PriceEnv(gym.Env):
             # If a specific product_id is provided, use it
             if product_id not in self.product_mapper:
                 raise ValueError(f"Product ID {product_id} not found in product_mapper.")
+            self.current_raw_product_id_str = product_id
             self.current_product_id = self.product_mapper[product_id]
         else:
             # Otherwise, sample a random product
-            self.current_product_id = int(self.np_random.choice(list(self.data_registry.keys())))
+            # Get a random raw product ID string, then map to dense ID
+            self.current_raw_product_id_str = self.np_random.choice(list(self.product_mapper.keys()))
+            self.current_product_id = self.product_mapper[self.current_raw_product_id_str]
         
         self.current_product_df = self.data_registry[self.current_product_id]
+        
+        # Filter the raw_data_df to get the raw data for the current product
+        self.current_raw_product_df = self.raw_data_df.filter(pl.col("PROD_CODE") == self.current_raw_product_id_str)
 
         if sequential:
             self.start_step = 0
         else:
-            max_start_step = len(self.current_product_df) - self.episode_horizon - 1
+            # max_start_step should be based on the shorter of the two dataframes to prevent out-of-bounds access
+            # Episode horizon should not exceed the available data for a product
+            max_start_step = min(len(self.current_product_df), len(self.current_raw_product_df)) - self.episode_horizon - 1
             self.start_step = self.np_random.integers(0, max_start_step + 1) if max_start_step > 0 else 0
         
         self.current_step = self.start_step
@@ -165,61 +176,74 @@ class PriceEnv(gym.Env):
         return observation, info
 
     def step(self, action):
-        current_row = self.current_product_df.row(self.current_step, named=True)
+        current_scaled_row = self.current_product_df.row(self.current_step, named=True)
+        current_raw_row = self.current_raw_product_df.row(self.current_step, named=True)
         
-        # Inverse transform the current scaled avg_price to get the real price
-        scaled_price = np.array(current_row["avg_price"]).reshape(-1, 1)
-        unscaled_price = self.avg_price_scaler.inverse_transform(scaled_price)[0][0]
-
+        # Get the true historical price directly from the raw data
+        true_historical_price = current_raw_row["avg_price"]
+        
         if self.action_type == "discrete":
             price_multiplier = self.config['env']['discrete_action_map'][action]
         else:
             price_multiplier = action[0]
 
-        new_price = unscaled_price * price_multiplier
+        # Calculate the new price based on the true historical price and the agent's action
+        new_price = true_historical_price * price_multiplier
 
         # Simulate demand (units sold) based on the new price
         if self.config['env']['demand_simulator_approach'] == "parametric":
             units_sold = self.demand_simulator.simulate_demand(
                 current_price=new_price, 
-                current_ref_price=unscaled_price
+                current_ref_price=true_historical_price # Reference price for elasticity is the true historical price
             )
         elif self.config['env']['demand_simulator_approach'] == "ml_model":
-            # Construct feature vector for ML model
-            # The ML model expects features in the order defined by self.feature_cols_ml_model
-            # All features must be scaled before passing to the ML model.
+            # --- Prepare features for ML model ---
+            # The ML model expects scaled features.
+            # We need to create a temporary row with all features (including new_price scaled)
+            # and then apply scalers to get the appropriate input for the ML model.
 
-            # Create a Polars DataFrame from the current row for scaling
-            # Ensure all_scaled_features are present in the row for proper scaling
-            row_data_for_scaling = {col: [current_row[col]] for col in self.all_scaled_features if col in current_row}
-            # Add SHOP_DATE and PROD_CODE if they are needed for any internal logic, but not for ML model input
-            if "SHOP_DATE" in current_row:
-                row_data_for_scaling["SHOP_DATE"] = [current_row["SHOP_DATE"]]
-            if "PROD_CODE" in current_row:
-                row_data_for_scaling["PROD_CODE"] = [current_row["PROD_CODE"]]
-
-            current_df_for_scaling = pl.DataFrame(row_data_for_scaling)
+            # Get the features from the current SCALED row
+            row_data_for_scaling = {col: [current_scaled_row[col]] for col in self.all_scaled_features if col in current_scaled_row}
             
-            # Apply all scalers to the current row's features
-            scaled_df_for_ml = apply_scalers(current_df_for_scaling, self.scalers, self.all_scaled_features)
-
+            # Create a temporary Polars DataFrame from the current scaled row
+            current_df_for_ml_input = pl.DataFrame(row_data_for_scaling)
+            
             # Scale the new_price using the avg_price_scaler
             scaled_new_price = self.avg_price_scaler.transform(np.array(new_price).reshape(-1, 1))[0][0]
             
-            # Update the scaled avg_price in the DataFrame with the new action's price
-            scaled_df_for_ml = scaled_df_for_ml.with_columns(pl.Series(name="avg_price", values=[scaled_new_price]))
+            # Update the 'avg_price' feature in the temporary DataFrame with the scaled new_price
+            current_df_for_ml_input = current_df_for_ml_input.with_columns(pl.Series(name="avg_price", values=[scaled_new_price]))
 
             # Extract features in the order expected by the ML model
-            # Ensure that all columns in self.feature_cols_ml_model are present in scaled_df_for_ml
-            ml_features = np.array([scaled_df_for_ml[col].item() for col in self.feature_cols_ml_model], dtype=np.float32)
+            ml_features = np.array([current_df_for_ml_input[col].item() for col in self.feature_cols_ml_model], dtype=np.float32)
             
-            units_sold = self.demand_simulator.simulate_demand(features=ml_features)
+            # Simulate demand using the ML model. The ML model predicts scaled units.
+            scaled_units_sold = self.demand_simulator.simulate_demand(features=ml_features)
+
+            # Inverse scale the predicted units to get actual units sold
+            # For this to work, we need a scaler for total_units. Let's assume it's available.
+            # If not, this part will require careful adjustment or a new scaler.
+            if 'total_units' in self.scalers:
+                units_sold = self.scalers['total_units'].inverse_transform(np.array(scaled_units_sold).reshape(-1, 1))[0][0]
+                units_sold = max(0, units_sold) # Ensure units sold is non-negative
+            else:
+                # Fallback: if no scaler for total_units, assume simulator output is already unscaled
+                # This needs to be explicitly checked in src/envs/simulators.py and train_demand_model.py
+                print("Warning: No scaler found for 'total_units'. Assuming ML model simulator outputs unscaled units.")
+                units_sold = scaled_units_sold
+            
         else:
             raise ValueError(f"Unknown demand_simulator_approach: {self.config['env']['demand_simulator_approach']}")
 
+        # Ensure units_sold is an integer (cannot sell partial units)
+        units_sold = round(units_sold)
 
         # Calculate reward (revenue)
-        reward = new_price * units_sold
+        revenue = new_price * units_sold
+        
+        # Calculate gross profit
+        fixed_cost_per_unit = self.historical_avg_prices[self.current_raw_product_id_str] * self.config['env'].get('cost_ratio', 0.7) # Assume 30% margin
+        gross_profit = (new_price - fixed_cost_per_unit) * units_sold
 
         self.current_step += 1
         done = self.current_step >= (self.start_step + self.episode_horizon) or self.current_step >= len(self.current_product_df) -1
@@ -229,10 +253,15 @@ class PriceEnv(gym.Env):
         if not done:
             info["units_sold"] = units_sold
             info["price"] = new_price # Add new_price to info dictionary
+            info["revenue"] = revenue
+            info["gross_profit"] = gross_profit
         
         # The gymnasium step function returns 5 values: obs, reward, terminated, truncated, info
         terminated = done 
         truncated = False # Not using time limit wrapper
+
+        # The reward should be the primary metric for the agent, which we defined as profit
+        reward = gross_profit # Agent should optimize for profit now, not just revenue
 
         return observation, reward, terminated, truncated, info
 

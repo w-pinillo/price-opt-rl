@@ -48,7 +48,7 @@ This file contains a log of significant events, decisions, and outcomes that occ
     -   **Root Cause:** The `net_arch` parameter in `policy_kwargs` was forcing a fixed, incorrect input dimension on the MLP, overriding the `features_dim` inferred from `CustomFeatureExtractor`.
     -   **Solution:** Removed the `net_arch` key from `agent_config` in `src/models/train_agent.py` to allow `stable-baselines3` to correctly infer the policy network's input dimension (34) from the feature extractor's output.
 -   **Subsequent Error (`Sizes of tensors must match except in dimension 1`):** This error arose during concatenation within `CustomFeatureExtractor`, indicating an issue with batch dimensions.
-    -   **Root Cause:** `stable-baselines3` was automatically one-hot encoding the `Discrete` observation for `product_id` as `(Batch_Size, 1, Num_Products)` (e.g., `[1024, 1, 100]`). The previous `argmax(dim=1)` was then incorrectly applied, resulting in mismatched tensor shapes during concatenation.
+    -   **Root Cause:** `stable-baselines3` was automatically one-hot encoding the `Discrete` observation for `product_id` as `(Batch_Size, 1, Num_Products)`. The previous `argmax(dim=1)` was then incorrectly applied, resulting in mismatched tensor shapes during concatenation.
     -   **Solution:** Modified the `forward` method in `src/models/custom_feature_extractor.py`. Implemented `product_ids_raw.squeeze(1)` to remove the extra dimension, transforming the tensor to `(Batch_Size, Num_Products)`. Subsequently, `th.argmax(..., dim=1)` was applied to correctly extract product indices, ensuring `product_embed` (shape `[Batch_Size, embedding_dim]`) and `market_features` (shape `[Batch_Size, market_features_dim]`) had consistent dimensions for successful concatenation.
 
 **Outcome:**
@@ -87,3 +87,16 @@ This file contains a log of significant events, decisions, and outcomes that occ
 
 **Next Steps:**
 - With the data pipeline now stable, the project can proceed with **Milestone 4 of Objective 6**: the full evaluation of the multi-product agent.
+
+---
+
+## DQN Multi-Product Integration Tasks (December 5, 2025)
+
+**Context:** Following the successful implementation and evaluation framework for the multi-product DRL agent with PPO, the next step is to integrate and evaluate DQN within the same multi-product pipeline. Initial investigation revealed that existing DQN models were trained on a single-product environment, making them incompatible with the current multi-product evaluation script.
+
+**Outstanding Tasks:**
+
+1.  **Update DQN configuration to be compatible with the multi-product training pipeline.**
+2.  **Train a new DQN model on the multi-product environment.**
+3.  **Evaluate the newly trained DQN model using the multi-product evaluation script.**
+4.  **Analyze and compare the performance of DQN and PPO agents.**
