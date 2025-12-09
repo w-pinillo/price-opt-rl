@@ -21,12 +21,16 @@ class MultiProductPriceEnv(gym.Env):
     """
     metadata = {"render_modes": ["human"], "render_fps": 30}
 
-    def __init__(self, data_registry: dict, product_mapper: dict, config: dict, render_mode=None):
+    def __init__(self, data_registry: dict, product_mapper: dict, config: dict, raw_data_df: pl.DataFrame, historical_avg_prices: dict, avg_daily_revenue_registry: dict, render_mode=None):
         super().__init__()
 
         self.data_registry = data_registry
         self.product_mapper = product_mapper
         self.config = config
+        self.raw_data_df = raw_data_df
+        self.historical_avg_prices = historical_avg_prices
+        self.avg_daily_revenue_registry = avg_daily_revenue_registry
+
         self.action_type = self.config['env']['action_type']
         self.episode_horizon = self.config['env']['episode_horizon']
         
@@ -54,9 +58,20 @@ class MultiProductPriceEnv(gym.Env):
         ]
         self.time_cols = ["day_of_week", "month", "year", "day_of_month", "week_of_year", "is_weekend"]
 
-        # For now, only using the parametric simulator to simplify refactoring
+        # --- Refactored Simulator Instantiation ---
+        # Create parameter maps for each product. For now, we use the same global
+        # parameters for all products, but this architecture supports per-product models.
+        sim_params = self.config['env']['parametric_simulator']
+        beta_price_map = {pid: sim_params['beta_price'] for pid in self.product_ids}
+        noise_std_map = {pid: sim_params['noise_std'] for pid in self.product_ids}
+        base_demand_map = {pid: sim_params['base_demand'] for pid in self.product_ids}
+        ref_price_map = {pid: sim_params['ref_price'] for pid in self.product_ids}
+
         self.demand_simulator = ParametricDemandSimulator(
-            **self.config['env']['parametric_simulator'],
+            beta_price=beta_price_map,
+            noise_std=noise_std_map,
+            base_demand=base_demand_map,
+            ref_price=ref_price_map,
             random_generator=self.np_random
         )
 
@@ -138,6 +153,7 @@ class MultiProductPriceEnv(gym.Env):
         new_price = unscaled_price * price_multiplier
 
         units_sold = self.demand_simulator.simulate_demand(
+            product_id=self.current_product_id,
             current_price=new_price, 
             current_ref_price=unscaled_price
         )

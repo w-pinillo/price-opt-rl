@@ -70,17 +70,19 @@ def seed_everything(seed: int):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-def make_multi_product_env(data_registry: dict, product_mapper: dict, avg_daily_revenue_registry: dict, config: dict):
+def make_multi_product_env(data_registry: dict, product_mapper: dict, avg_daily_revenue_registry: dict, config: dict, raw_data_df: pl.DataFrame, historical_avg_prices: dict):
     """
     Creates, configures, and returns the multi-product pricing environment.
     """
-    # Import PriceEnv locally to avoid circular dependency
-    from src.envs.price_env import PriceEnv
+    # Import MultiProductPriceEnv locally to avoid circular dependency
+    from src.envs.multi_product_price_env import MultiProductPriceEnv
 
-    env = PriceEnv(
+    env = MultiProductPriceEnv(
         data_registry=data_registry,
         product_mapper=product_mapper,
-        avg_daily_revenue_registry=avg_daily_revenue_registry,
         config=config,
+        raw_data_df=raw_data_df,
+        historical_avg_prices=historical_avg_prices,
+        avg_daily_revenue_registry=avg_daily_revenue_registry
     )
     return env

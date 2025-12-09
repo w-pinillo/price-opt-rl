@@ -3,9 +3,12 @@ import yaml
 import os
 import polars as pl
 import numpy as np
+import pandas as pd # Import pandas for table display
+import matplotlib.pyplot as plt
 
 from src.utils import make_multi_product_env
 from src.data_utils import load_data_registry, load_product_registry
+from src.envs.simulators import ParametricDemandSimulator
 
 # This is a placeholder for get_agent_class from train_agent.py
 # In a real implementation, this might be moved to a shared utils file.
@@ -14,85 +17,242 @@ def get_agent_class(agent_name: str):
     module = importlib.import_module("stable_baselines3")
     return getattr(module, agent_name.upper())
 
-def evaluate(agent_path: str, raw_product_id: str, episodes: int, config_path: str):
+def calculate_price_volatility(prices: list) -> float:
+    """Calculates the volatility of a sequence of prices."""
+    if len(prices) < 2:
+        return 0.0
+    price_changes = np.diff(prices)
+    return np.std(price_changes)
+
+def calculate_do_nothing_baseline(raw_product_df: pl.DataFrame, median_price: float, episode_horizon: int, cost_ratio: float) -> tuple[float, float]:
     """
-    Evaluates a trained multi-product agent on a single, specific product.
+    Calculates the 'Do-Nothing' baseline profit and volatility.
+    Volatility is 0 as the price is constant.
     """
-    # --- 1. Load configurations and data ---
-    with open(config_path, 'r') as f:
+    fixed_cost_per_unit = median_price * cost_ratio
+    total_units_in_horizon = raw_product_df.head(episode_horizon)['total_units'].sum()
+    gross_profit = (median_price - fixed_cost_per_unit) * total_units_in_horizon
+    return gross_profit, 0.0 # Profit and Volatility
+
+def calculate_trend_based_baseline(raw_product_df: pl.DataFrame, product_id: int, episode_horizon: int, cost_ratio: float, simulator: ParametricDemandSimulator) -> tuple[float, float]:
+    """
+    Calculates the 'Trend-Based Heuristic' baseline profit and volatility.
+    """
+    df = raw_product_df.with_columns([
+        pl.col("avg_price").rolling_mean(window_size=7).alias("ma_7"),
+        pl.col("avg_price").rolling_mean(window_size=30).alias("ma_30")
+    ]).drop_nulls()
+
+    if len(df) < episode_horizon:
+        return 0.0, 0.0
+
+    total_profit = 0
+    prices = []
+    
+    sim_df = df.head(episode_horizon)
+    
+    for row in sim_df.iter_rows(named=True):
+        ma_7 = row['ma_7']
+        ma_30 = row['ma_30']
+        
+        if ma_7 > ma_30:
+            price_multiplier = 1.05
+        else:
+            price_multiplier = 0.95
+            
+        heuristic_price = row['avg_price'] * price_multiplier
+        prices.append(heuristic_price)
+        
+        units_sold = simulator.simulate_demand(
+            product_id=product_id,
+            current_price=heuristic_price,
+            current_ref_price=row['avg_price']
+        )
+        units_sold = round(max(0, units_sold))
+
+        fixed_cost_per_unit = row['avg_price'] * cost_ratio
+        total_profit += (heuristic_price - fixed_cost_per_unit) * units_sold
+        
+    volatility = calculate_price_volatility(prices)
+    return total_profit, volatility
+
+def generate_scatter_plot(results_df: pd.DataFrame, output_dir: str):
+    """Generates and saves a scatter plot of improvement vs. sales volatility."""
+    plt.figure(figsize=(10, 6))
+    plt.scatter(results_df['Sales Volatility'], results_df['Improvement vs Do-Nothing (%)'], alpha=0.6)
+    plt.title('Agent Profit Improvement vs. Historical Sales Volatility')
+    plt.xlabel('Historical Sales Volatility (StdDev of Units Sold)')
+    plt.ylabel('Profit Improvement vs. Do-Nothing (%)')
+    plt.grid(True)
+    
+    plot_path = os.path.join(output_dir, "improvement_vs_volatility.png")
+    plt.savefig(plot_path)
+    print(f"\nScatter plot saved to {plot_path}")
+
+def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_aggregated_data_path: str, log_product_ids: list):
+    """
+    Evaluates a trained multi-product agent on all products in the test set.
+    """
+    # --- 1. Load Configurations and Data ---
+    run_dir = os.path.dirname(agent_path)
+    config_file_in_run_dir = os.path.join(run_dir, "config.yaml")
+
+    if not os.path.exists(config_file_in_run_dir):
+        raise FileNotFoundError(f"Config file not found in agent's run directory: {config_file_in_run_dir}")
+
+    with open(config_file_in_run_dir, 'r') as f:
         config = yaml.safe_load(f)
 
-    # Use the run directory from the agent path to find the correct product registry
-    run_dir = os.path.dirname(os.path.dirname(agent_path)) # e.g., models/dqn_baseline_.../best_model.zip -> models/dqn_baseline_...
-    registry_path = os.path.join(run_dir, 'product_registry')
+    if use_pre_aggregated_data:
+        raw_data_df = pl.read_parquet(pre_aggregated_data_path)
+    else:
+        # Load raw data directly from the configured path
+        print("Loading raw data from config['paths']['raw_data']...")
+        if 'raw_data' not in config['paths']:
+            raise KeyError("config['paths']['raw_data'] is not defined. Cannot load raw data.")
+        raw_data_df = pl.read_parquet(config['paths']['raw_data'])
 
+    historical_median_prices = raw_data_df.group_by("PROD_CODE").agg(
+        pl.median("avg_price").alias("historical_median_price")
+    ).to_pandas().set_index("PROD_CODE")['historical_median_price'].to_dict()
+    
+    historical_sales_volatility = raw_data_df.group_by("PROD_CODE").agg(
+        pl.std("total_units").alias("sales_volatility")
+    ).to_pandas().set_index("PROD_CODE")['sales_volatility'].to_dict()
+
+    registry_path = os.path.join(run_dir, 'product_registry')
     data_path = os.path.join(config['paths']['processed_data_dir'], "test_scaled.parquet")
 
     print("Loading data registries...")
     data_registry, product_mapper, avg_daily_revenue_registry = load_data_registry(
         data_path=data_path,
-        output_path=registry_path # This will just load if it exists, and re-create if not
+        output_path=registry_path
     )
     
-    # Invert the mapper to get raw_id from dense_id
-    # Note: The product_mapper from load_data_registry is raw -> dense. We need to find our raw_id.
-    if raw_product_id not in product_mapper:
-        raise ValueError(f"Product ID {raw_product_id} not found in the product registry.")
-    
-    dense_product_id = product_mapper[raw_product_id]
-
     # --- 2. Load the trained agent ---
-    agent_name = config['agent']
+    agent_name = config['training']['agent']
     agent_class = get_agent_class(agent_name)
     print(f"Loading agent from {agent_path}...")
-    agent = agent_class.load(agent_path)
+    # Handle the .zip extension automatically added by stable-baselines3
+    if agent_path.endswith('.zip'):
+        agent_path = agent_path[:-4]
+    agent = agent_class.load(f"{agent_path}.zip")
 
-    # --- 3. Create the evaluation environment ---
-    print(f"Creating evaluation environment for product: {raw_product_id} (Dense ID: {dense_product_id})")
-    eval_env = make_multi_product_env(data_registry, product_mapper, config)
+    print("Creating evaluation environment...")
+    eval_env = make_multi_product_env(data_registry, product_mapper, avg_daily_revenue_registry, config, raw_data_df, historical_median_prices)
+    demand_simulator = eval_env.demand_simulator
 
-    # --- 4. Run the evaluation loop ---
-    total_revenues = []
-    print(f"Running evaluation for {episodes} episodes...")
-
-    for episode in range(episodes):
-        obs, info = eval_env.reset(product_id=dense_product_id, sequential=True) # Use sequential=True for consistent evaluation
-        done = False
-        episode_revenue = 0
-        
-        while not done:
-            action, _states = agent.predict(obs, deterministic=True)
-            obs, reward, terminated, truncated, info = eval_env.step(action)
-            done = terminated or truncated
-            episode_revenue += reward
-        
-        total_revenues.append(episode_revenue)
-        print(f"Episode {episode + 1}/{episodes} | Revenue: {episode_revenue:.2f}")
-
-    # --- 5. Report results ---
-    avg_agent_revenue = np.mean(total_revenues)
-    baseline_revenue = avg_daily_revenue_registry[dense_product_id] * config['env']['episode_horizon']
-
-    print("\n--- Evaluation Summary ---")
-    print(f"Product ID: {raw_product_id}")
-    print(f"Number of Episodes: {episodes}")
-    print("-" * 20)
-    print(f"Average Agent Revenue per Episode: {avg_agent_revenue:.2f}")
-    print(f"Baseline Historical Revenue per Episode: {baseline_revenue:.2f}")
-    print("-" * 20)
+    all_results = []
+    product_list = list(product_mapper.keys())
     
-    improvement = ((avg_agent_revenue - baseline_revenue) / baseline_revenue) * 100 if baseline_revenue > 0 else float('inf')
-    print(f"Improvement over baseline: {improvement:.2f}%")
+    print(f"Running evaluation for {len(product_list)} products over {episodes} episodes each...")
+
+    for i, raw_product_id in enumerate(product_list):
+        dense_id = product_mapper[raw_product_id]
+        agent_profits = []
+        agent_price_sequences = []
+        
+        print(f"\n({i+1}/{len(product_list)}) Evaluating Product: {raw_product_id}")
+
+        for episode in range(episodes):
+            obs, info = eval_env.reset(product_id=dense_id, sequential=True)
+            done = False
+            episode_profit = 0
+            episode_prices = []
+            
+            while not done:
+                action, _states = agent.predict(obs, deterministic=True)
+                obs, reward, terminated, truncated, info = eval_env.step(action)
+                done = terminated or truncated
+                episode_profit += reward
+                if not done:
+                    episode_prices.append(info['price'])
+            
+            agent_profits.append(episode_profit)
+            agent_price_sequences.append(episode_prices)
+        
+        raw_product_df_eval = raw_data_df.filter(pl.col("PROD_CODE") == raw_product_id)
+        
+        # Add logging here
+        if raw_product_id in log_product_ids:
+            print(f"\n--- Price Log for Product: {raw_product_id} ---")
+            print(f"Agent Prices (Episode 0): {[f'{p:.2f}' for p in agent_price_sequences[0]] if agent_price_sequences else 'N/A'}")
+            # Ensure raw_product_df_eval is not empty before accessing 'avg_price'
+            if not raw_product_df_eval.is_empty():
+                print(f"Historical Average Prices: {[f'{p:.2f}' for p in raw_product_df_eval.head(len(agent_price_sequences[0]))['avg_price'].to_list()]}")
+            else:
+                print(f"Historical Average Prices: N/A (raw_product_df_eval is empty)")
+            print(f"--------------------------------------")
+            
+        median_price = historical_median_prices[raw_product_id]
+        do_nothing_profit, do_nothing_volatility = calculate_do_nothing_baseline(
+            raw_product_df_eval,
+            median_price,
+            config['env']['episode_horizon'],
+            config['env'].get('cost_ratio', 0.7)
+        )
+
+        trend_based_profit, trend_based_volatility = calculate_trend_based_baseline(
+            raw_product_df_eval,
+            dense_id,
+            config['env']['episode_horizon'],
+            config['env'].get('cost_ratio', 0.7),
+            demand_simulator
+        )
+
+        avg_agent_profit = np.mean(agent_profits)
+        avg_agent_volatility = np.mean([calculate_price_volatility(p) for p in agent_price_sequences])
+        
+        improvement_over_do_nothing = ((avg_agent_profit - do_nothing_profit) / abs(do_nothing_profit)) * 100 if do_nothing_profit != 0 else float('inf')
+        improvement_over_trend = ((avg_agent_profit - trend_based_profit) / abs(trend_based_profit)) * 100 if trend_based_profit != 0 else float('inf')
+
+        all_results.append({
+            "Product ID": raw_product_id,
+            "Agent Profit": avg_agent_profit,
+            "Agent Volatility": avg_agent_volatility,
+            "Do-Nothing Profit": do_nothing_profit,
+            "Do-Nothing Volatility": do_nothing_volatility,
+            "Trend-Based Profit": trend_based_profit,
+            "Trend-Based Volatility": trend_based_volatility,
+            "Improvement vs Do-Nothing (%)": improvement_over_do_nothing,
+            "Improvement vs Trend (%)": improvement_over_trend,
+            "Sales Volatility": historical_sales_volatility.get(raw_product_id, 0)
+        })
+
+    results_df = pd.DataFrame(all_results)
+    
+    print("\n\n--- Evaluation Summary ---")
+    print(results_df.to_string(index=False, float_format="%.2f"))
+    print("\n" + "-"*30)
+
+    avg_improvement_do_nothing = results_df[results_df['Improvement vs Do-Nothing (%)'] != np.inf]['Improvement vs Do-Nothing (%)'].mean()
+    avg_improvement_trend = results_df[results_df['Improvement vs Trend (%)'] != np.inf]['Improvement vs Trend (%)'].mean()
+    products_improved_do_nothing = (results_df['Improvement vs Do-Nothing (%)'] > 0).sum()
+    products_improved_trend = (results_df['Improvement vs Trend (%)'] > 0).sum()
+    total_products = len(results_df)
+
+    print("\n--- Aggregate Performance ---")
+    print(f"Average Improvement over 'Do-Nothing' Baseline: {avg_improvement_do_nothing:.2f}%")
+    print(f"Agent outperformed 'Do-Nothing' for {products_improved_do_nothing} of {total_products} products ({products_improved_do_nothing/total_products:.1%})")
+    print("-" * 20)
+    print(f"Average Improvement over 'Trend-Based' Baseline: {avg_improvement_trend:.2f}%")
+    print(f"Agent outperformed 'Trend-Based' for {products_improved_trend} of {total_products} products ({products_improved_trend/total_products:.1%})")
     print("--- End of Summary ---")
+    
+    # Generate and save the scatter plot
+    generate_scatter_plot(results_df, run_dir)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate a multi-product DRL agent.")
+    parser = argparse.ArgumentParser(description="Evaluate a multi-product DRL agent across all products.")
     parser.add_argument("--agent-path", type=str, required=True, help="Path to the trained agent's .zip file.")
-    parser.add_argument("--product-id", type=str, required=True, help="The raw PROD_CODE of the product to evaluate.")
-    parser.add_argument("--episodes", type=int, default=10, help="Number of episodes to run for evaluation.")
-    parser.add_argument("--config-path", type=str, required=True, help="Path to the training configuration file (e.g., base_config.yaml).")
+    parser.add_argument("--episodes", type=int, default=1, help="Number of episodes to run per product for evaluation.")
+    parser.add_argument("--use-pre-aggregated-data", action="store_true", help="Use pre-aggregated data for evaluation.")
+    parser.add_argument("--pre-aggregated-data-path", type=str, default="data/processed/top100_daily.parquet", help="Path to the pre-aggregated data file.")
+    parser.add_argument("--log-product-ids", type=str, default="", help="Comma-separated list of product IDs to log pricing decisions for.")
     
     args = parser.parse_args()
     
-    evaluate(args.agent_path, args.product_id, args.episodes, args.config_path)
+    log_product_ids = [pid.strip() for pid in args.log_product_ids.split(',')] if args.log_product_ids else []
+    
+    evaluate(args.agent_path, args.episodes, args.use_pre_aggregated_data, args.pre_aggregated_data_path, log_product_ids)

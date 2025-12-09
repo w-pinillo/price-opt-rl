@@ -100,23 +100,36 @@ def train(config: dict, run_dir: str):
     
     agent_config = config.get('agent_params', {}).get(agent_name, {})
     
-    # Define policy_kwargs for the custom feature extractor
-    policy_kwargs = {
+    # Initialize policy_kwargs for the agent
+    # This ensures CustomFeatureExtractor is always used for MultiInputPolicy
+    policy_kwargs_for_agent = {
         'features_extractor_class': CustomFeatureExtractor
     }
-    # Remove embedding_dim from agent_config as it's handled by policy_kwargs
+    
+    # If policy_kwargs are defined in the agent's config, merge them
+    if 'policy_kwargs' in agent_config:
+        # Merge dicts: config-defined policy_kwargs will override defaults if any
+        policy_kwargs_for_agent.update(agent_config['policy_kwargs'])
+        # Remove 'policy_kwargs' from agent_config to prevent it from being passed twice
+        del agent_config['policy_kwargs']
+    
+    # Check for and warn about 'embedding_dim' being in top-level agent_config
+    # If embedding_dim is intended for CustomFeatureExtractor, it should be in
+    # policy_kwargs['features_extractor_kwargs']
     if 'embedding_dim' in agent_config:
+        print(f"WARNING: 'embedding_dim' found in top-level agent_config for {agent_name}. It should be specified within 'policy_kwargs.features_extractor_kwargs' if intended for CustomFeatureExtractor. Removing it from agent_config.")
         del agent_config['embedding_dim']
     
-    # Remove net_arch from agent_config to let SB3 infer input dimension from feature extractor
+    # Check for and warn about 'net_arch' being in top-level agent_config
+    # 'net_arch' should be specified within 'policy_kwargs'
     if 'net_arch' in agent_config:
-        print(f"WARNING: Removing 'net_arch' from agent_config for {agent_name} to allow SB3 to infer policy network input dimensions from the CustomFeatureExtractor.")
+        print(f"WARNING: 'net_arch' found in top-level agent_config for {agent_name}. It should be specified within 'policy_kwargs'. Removing it from agent_config.")
         del agent_config['net_arch']
 
     model = agent_class(
         "MultiInputPolicy", # Changed from "MlpPolicy"
         env,
-        policy_kwargs=policy_kwargs,
+        policy_kwargs=policy_kwargs_for_agent, # Use the correctly constructed policy_kwargs
         verbose=1,
         tensorboard_log=os.path.join(run_dir, 'tensorboard_log'),
         device=config['training']['device'],

@@ -22,7 +22,7 @@ def load_data_registry(data_path: str, output_path: str):
     full_df = pl.read_parquet(data_path)
     full_df = full_df.fill_nan(0)
 
-    unique_product_codes = sorted(full_df["PROD_CODE"].unique().to_list())
+    unique_product_codes = sorted(full_df["product_id"].unique().to_list()) # Changed PROD_CODE to product_id
     product_mapper = {raw_id: idx for idx, raw_id in enumerate(unique_product_codes)}
 
     # Save product_registry.json
@@ -36,7 +36,7 @@ def load_data_registry(data_path: str, output_path: str):
     avg_daily_revenue_registry = {}
 
     for raw_id, dense_id in product_mapper.items():
-        product_df = full_df.filter(pl.col("PROD_CODE") == raw_id)
+        product_df = full_df.filter(pl.col("product_id") == raw_id) # Changed PROD_CODE to product_id
         data_registry[dense_id] = product_df
 
         # Calculate average daily revenue for the product

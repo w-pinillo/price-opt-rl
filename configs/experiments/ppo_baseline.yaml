@@ -2,6 +2,7 @@
 agent: ppo
 training:
   n_envs: 1
+  agent: "PPO" # Explicitly set agent for training to PPO
 agent_params:
   ppo:
     embedding_dim: 16
@@ -12,4 +13,6 @@ agent_params:
     gamma: 0.99
     gae_lambda: 0.95
     clip_range: 0.2
-    ent_coef: 0.0
+    ent_coef: 0.1
+    policy_kwargs:
+      net_arch: [256, 256] # Two hidden layers with 256 units each

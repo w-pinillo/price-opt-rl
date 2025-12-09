@@ -141,10 +141,11 @@ This plan outlines the steps to verify the functionality of the new multi-produc
 **Status: Completed**
 
 #### Milestone 4: Full Evaluation Verification
-*   **Goal:** Verify that the `evaluate_multi_product_agent.py` script can load a trained model and evaluate it.
-*   **Action:** Run the evaluation script on the test model generated in Milestone 3.
-*   **Command Example:** `python evaluate_multi_product_agent.py --agent-path models/test_multiproduct_run/final_model.zip --product-id PRD0904358 --config-path configs/base_config.yaml`
+*   **Goal:** Verify that the `evaluate_multi_product_agent.py` script can load a trained model and evaluate it across all products.
+*   **Action:** Run the evaluation script on a trained model. The script is designed to iterate through all products automatically.
+*   **Command Example:** `venv/bin/python evaluate_multi_product_agent.py --agent-path models/<run_name>/final_model.zip --episodes 1 --use-pre-aggregated-data`
 *   **Checks:**
     *   The script loads the agent and data without errors.
-    *   The evaluation loop runs for the specified number of episodes.
-    *   A final "Evaluation Summary" is printed, comparing the agent's revenue against the historical baseline.
+    *   The evaluation loop runs for all products.
+    *   A final "Evaluation Summary" and "Aggregate Performance" section are printed.
+**Status: Completed**

@@ -1,6 +1,71 @@
-# Gemini Work Log
+## Multi-Product Agent Evaluation: Performance Analysis (December 9, 2025)
 
-This file contains a log of significant events, decisions, and outcomes that occur during the project's development.
+**Context:** Following the successful integration test (Milestone 3), a full evaluation (Milestone 4) was run on the multi-product PPO agent across all 100 products using the `evaluate_multi_product_agent.py` script.
+
+**Outcome:** The evaluation revealed that the agent has **failed to learn a useful or profitable pricing policy.** The model is not viable in its current state.
+
+**Key Observations:**
+
+*   **Poor Baseline Performance:** The agent's policy was unprofitable compared to simple baselines.
+    *   **vs. "Do-Nothing" Baseline:** The agent was profitable for only **12 out of 100 products (12%)**.
+    *   **vs. "Trend-Based" Baseline:** The agent was profitable for only **9 out of 100 products (9%)**.
+*   **Misleading Averages:** While the average improvement over the "Do-Nothing" baseline was +16.15% (previously 15.13%), this figure is still heavily skewed by a few extreme outliers. The vast majority of products saw a significant profit reduction, often between -95% and -99%.
+*   **Trivial Policy Learned:** For a large number of products, the `Agent Volatility` was `0.00`. This indicates the agent learned a "trivial" policy of setting a single, constant price and not adapting it, suggesting a failure to learn a dynamic strategy.
+*   **Outlier-Driven Results:** A small handful of products reported massive, potentially unrealistic performance gains (e.g., +7573%, +665%), which likely point to issues either with the data for those products or the agent's response to specific, unusual state representations.
+*   **Price Logs:** Detailed price logging confirmed that even for the "outlier" products, the agent still outputs a constant price, failing to learn any dynamic pricing strategy.
+
+**Next Steps (Prior to `net_arch` modification):**
+- The immediate priority is to diagnose the cause of the poor performance.
+- The primary hypothesis is that the agent has defaulted to a simple, low-price policy.
+- The investigation will begin by analyzing the specific pricing decisions made by the agent during the evaluation to confirm this behavior.
+- Subsequent steps will likely involve revisiting and tuning the agent's hyperparameters in `ppo_baseline.yaml`.
+
+---
+
+## PPO Agent: Policy Network Architecture Update (December 9, 2025)
+
+**Context:** The initial evaluation of the multi-product PPO agent revealed it was learning a "trivial policy" (constant pricing) across most products, leading to poor performance. Analysis indicated this might be due to an overly simplistic default policy network architecture used by Stable-Baselines3 after the `CustomFeatureExtractor`.
+
+**Actions Taken:**
+1.  **Modified `src/models/train_agent.py`:** Updated the `train` function to correctly parse and merge `policy_kwargs` from the experiment configuration files (e.g., `ppo_baseline.yaml`) into the agent's constructor. This allows for explicit configuration of the policy network architecture.
+2.  **Modified `configs/experiments/ppo_baseline.yaml`:** Added a `policy_kwargs` section with `net_arch: [256, 256]` to define a more complex MLP architecture for the agent's policy and value networks (two hidden layers, each with 256 units).
+
+**Outcome:**
+- The agent was re-trained with the updated policy network architecture.
+- A subsequent evaluation showed **no significant change** in the agent's behavior. The agent still exhibited the same "trivial policy" (constant pricing) for both poorly performing products and the high-profit outliers. Overall performance metrics remained virtually identical to the previous agent.
+
+**Conclusion:** The problem is not solely the capacity of the policy network. The agent is failing to learn dynamic pricing strategies, likely due to other underlying issues.
+
+**Next Steps:**
+- The next logical step is to address the **exploration-exploitation balance**. The `ent_coef` (entropy coefficient) in `ppo_baseline.yaml` is currently `0.0`, which severely discourages exploration.
+- The plan is to increase `ent_coef` to `0.01` to encourage more diverse action selection during training, in hopes of breaking the agent out of its constant-price local optimum.
+
+---
+
+## Multi-Product Environment and Simulator Bug Fix (December 9, 2025)
+
+**Context:** Previous training attempts, including modifying the network architecture and entropy bonus, failed to prevent the agent from learning a "trivial" (constant price) policy. A deeper investigation revealed two critical, related bugs:
+1.  **Incorrect Environment Instantiation:** `src/utils.py` was instantiating the old, single-product `PriceEnv` instead of the required `MultiProductPriceEnv`.
+2.  **Non-Product-Aware Simulator:** The `ParametricDemandSimulator` was using a single set of global demand parameters for all 100 products, and the baseline calculation in the evaluation script was also using a faulty, non-product-aware simulator.
+
+**Actions Taken:**
+1.  **Refactored `src/envs/simulators.py`:** Modified `ParametricDemandSimulator` to accept dictionaries mapping product IDs to their specific demand parameters, making it product-aware.
+2.  **Refactored `src/envs/multi_product_price_env.py`:** Updated the environment to correctly initialize the new product-aware simulator and pass the correct product ID during the `step` function.
+3.  **Corrected `src/utils.py`:** Fixed the `make_multi_product_env` helper function to import and instantiate the correct `MultiProductPriceEnv`.
+4.  **Corrected `evaluate_multi_product_agent.py`:** Fixed a `KeyError` by ensuring the correct (dense integer) product IDs were passed to the simulator and baseline functions.
+
+**Outcome:**
+- After fixing these fundamental bugs, the agent was re-trained.
+- A subsequent evaluation showed a **dramatic improvement in performance**.
+    - The agent now outperforms the 'Trend-Based' baseline for **57% of products** (up from 9%).
+    - The average profit improvement vs. the trend baseline is now **+91.99%** (up from -59%).
+- This confirms the primary blocker to learning has been resolved.
+
+**Outstanding Issue:**
+- Despite the performance leap, analysis of price logs shows the agent is still learning a non-dynamic, "trivial" constant-price policy, although it now picks a *better* constant price.
+
+**Next Steps:**
+- The agent is learning, but not learning to be dynamic. The next step is to revisit the hypothesis that the agent is not exploring enough. I will increase the `ent_coef` (entropy coefficient) in the configuration to a more significant value (`0.1`) to more forcefully encourage the agent to try different actions and hopefully learn a dynamic policy.
 
 ---
 
@@ -48,7 +113,7 @@ This file contains a log of significant events, decisions, and outcomes that occ
     -   **Root Cause:** The `net_arch` parameter in `policy_kwargs` was forcing a fixed, incorrect input dimension on the MLP, overriding the `features_dim` inferred from `CustomFeatureExtractor`.
     -   **Solution:** Removed the `net_arch` key from `agent_config` in `src/models/train_agent.py` to allow `stable-baselines3` to correctly infer the policy network's input dimension (34) from the feature extractor's output.
 -   **Subsequent Error (`Sizes of tensors must match except in dimension 1`):** This error arose during concatenation within `CustomFeatureExtractor`, indicating an issue with batch dimensions.
-    -   **Root Cause:** `stable-baselines3` was automatically one-hot encoding the `Discrete` observation for `product_id` as `(Batch_Size, 1, Num_Products)` (e.g., `[1024, 1, 100]`). The previous `argmax(dim=1)` was then incorrectly applied, resulting in mismatched tensor shapes during concatenation.
+    -   **Root Cause:** `stable-baselines3` was automatically one-hot encoding the `Discrete` observation for `product_id` as `(Batch_Size, 1, Num_Products)`. The previous `argmax(dim=1)` was then incorrectly applied, resulting in mismatched tensor shapes during concatenation.
     -   **Solution:** Modified the `forward` method in `src/models/custom_feature_extractor.py`. Implemented `product_ids_raw.squeeze(1)` to remove the extra dimension, transforming the tensor to `(Batch_Size, Num_Products)`. Subsequently, `th.argmax(..., dim=1)` was applied to correctly extract product indices, ensuring `product_embed` (shape `[Batch_Size, embedding_dim]`) and `market_features` (shape `[Batch_Size, market_features_dim]`) had consistent dimensions for successful concatenation.
 
 **Outcome:**
@@ -87,3 +152,16 @@ This file contains a log of significant events, decisions, and outcomes that occ
 
 **Next Steps:**
 - With the data pipeline now stable, the project can proceed with **Milestone 4 of Objective 6**: the full evaluation of the multi-product agent.
+
+---
+
+## DQN Multi-Product Integration Tasks (December 5, 2025)
+
+**Context:** Following the successful implementation and evaluation framework for the multi-product DRL agent with PPO, the next step is to integrate and evaluate DQN within the same multi-product pipeline. Initial investigation revealed that existing DQN models were trained on a single-product environment, making them incompatible with the current multi-product evaluation script.
+
+**Outstanding Tasks:**
+
+1.  **Update DQN configuration to be compatible with the multi-product training pipeline.**
+2.  **Train a new DQN model on the multi-product environment.**
+3.  **Evaluate the newly trained DQN model using the multi-product evaluation script.**
+4.  **Analyze and compare the performance of DQN and PPO agents.**
