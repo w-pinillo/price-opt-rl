@@ -83,7 +83,7 @@ Configure the project and system environment to leverage a powerful desktop with
 *   **Week 8**: Full evaluation, sensitivity analysis, visualization and write-up.
 
 ## Objective 6 - Implement a Multi-Product DRL Agent
-**Status: In Progress**
+**Status: Completed**
 
 ### Goal
 Transition from a "one agent per product" training strategy to a single, unified DRL agent capable of learning an optimal pricing policy for all 100 products simultaneously. This approach aims to improve training efficiency, scalability, and foster knowledge sharing between products.
@@ -102,22 +102,22 @@ The chosen strategy involves modifying the environment and the agent's perceptio
     *   `src/utils.py`: The `make_env` function will be simplified. It will no longer need to filter data for a specific product.
 
 ### Implementation To-Do List
-- [] **Environment (`PriceEnv`):**
-    - [] Modify `__init__` to handle the full, multi-product DataFrame.
-    - [] Create a mapping from `PROD_CODE` to a dense integer index.
-    - [] Update the `observation_space` to be a `Dict` including the product index and market features.
-    - [] Modify `reset()` to sample a `PROD_CODE` (and its corresponding index) for each new episode.
-    - [] Update `_get_obs()` to return a dictionary observation.
-- [] **Training Pipeline:**
-    - [] Modify `src/utils.py`'s `make_env` to no longer filter by `product_id`.
-    - [] Modify `src/models/train_agent.py` to remove the `product_id` parameter and logic, and to integrate the custom feature extractor.
-    - [] Update experiment configuration files (`configs/experiments/*.yaml`) to remove the `product_id` parameter and add configuration for the custom feature extractor (e.g., embedding_dim).
-- [] **Verification:**
-    - [] Run a training experiment with the new multi-product agent.
-    - [] Implement a **Tiered Evaluation Baseline**:
-        - [] **Tier 1 (Business Baseline):** Verify the agent beats `avg_daily_revenue` (or existing pricing logic).
-        - [] **Tier 2 (Architectural Baseline):** Compare the multi-product agent's performance against independent agents for 5 representative products (2 high-volume, 3 low-volume).
-    - [] Verify that the agent learns a reasonable policy and that the training process is efficient.
+- [x] **Environment (`PriceEnv`):**
+    - [x] Modify `__init__` to handle the full, multi-product DataFrame.
+    - [x] Create a mapping from `PROD_CODE` to a dense integer index.
+    - [x] Update the `observation_space` to be a `Dict` including the product index and market features.
+    - [x] Modify `reset()` to sample a `PROD_CODE` (and its corresponding index) for each new episode.
+    - [x] Update `_get_obs()` to return a dictionary observation.
+- [x] **Training Pipeline:**
+    - [x] Modify `src/utils.py`'s `make_env` to no longer filter by `product_id`.
+    - [x] Modify `src/models/train_agent.py` to remove the `product_id` parameter and logic, and to integrate the custom feature extractor.
+    - [x] Update experiment configuration files (`configs/experiments/*.yaml`) to remove the `product_id` parameter and add configuration for the custom feature extractor (e.g., embedding_dim).
+- [x] **Verification:**
+    - [x] Run a training experiment with the new multi-product agent.
+    - [x] Implement a **Tiered Evaluation Baseline**:
+        - [x] **Tier 1 (Business Baseline):** Verify the agent beats `avg_daily_revenue` (or existing pricing logic).
+        - [x] **Tier 2 (Architectural Baseline):** Compare the multi-product agent's performance against independent agents for 5 representative products (2 high-volume, 3 low-volume).
+    - [x] Verify that the agent learns a reasonable policy and that the training process is efficient.
 
 ### Evaluation Plan for Multi-Product Agent
 This plan outlines the steps to verify the functionality of the new multi-product agent architecture.

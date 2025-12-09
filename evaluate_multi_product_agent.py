@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd # Import pandas for table display
 import matplotlib.pyplot as plt
 
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+
 from src.utils import make_multi_product_env
 from src.data_utils import load_data_registry, load_product_registry
 from src.envs.simulators import ParametricDemandSimulator
@@ -139,8 +141,31 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
     agent = agent_class.load(f"{agent_path}.zip")
 
     print("Creating evaluation environment...")
-    eval_env = make_multi_product_env(data_registry, product_mapper, avg_daily_revenue_registry, config, raw_data_df, historical_median_prices)
-    demand_simulator = eval_env.demand_simulator
+    # Create a dummy VecEnv to load the normalizer stats
+    env_fn = lambda: make_multi_product_env(
+        data_registry=data_registry, 
+        product_mapper=product_mapper, 
+        avg_daily_revenue_registry=avg_daily_revenue_registry, 
+        config=config, 
+        raw_data_df=raw_data_df, 
+        historical_avg_prices=historical_median_prices
+    )
+    dummy_env = DummyVecEnv([env_fn])
+
+    # Load the saved VecNormalize stats
+    vec_normalize_path = os.path.join(run_dir, "vecnormalize.pkl")
+    if not os.path.exists(vec_normalize_path):
+        raise FileNotFoundError(f"VecNormalize stats not found at {vec_normalize_path}. Cannot evaluate a normalized model without them.")
+
+    print(f"Loading VecNormalize stats from {vec_normalize_path} and wrapping the environment.")
+    eval_env = VecNormalize.load(vec_normalize_path, dummy_env)
+    
+    # Set to evaluation mode
+    eval_env.training = False
+    # Don't normalize rewards during evaluation to get true reward values
+    eval_env.norm_reward = False
+
+    demand_simulator = eval_env.get_attr("demand_simulator")[0]
 
     all_results = []
     product_list = list(product_mapper.keys())
@@ -155,18 +180,27 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
         print(f"\n({i+1}/{len(product_list)}) Evaluating Product: {raw_product_id}")
 
         for episode in range(episodes):
-            obs, info = eval_env.reset(product_id=dense_id, sequential=True)
+            # Use env_method to call the custom reset method on the underlying environment
+            # This returns the un-normalized observation, so we must normalize it
+            unnormalized_obs_dict, _ = eval_env.env_method('reset', product_id=dense_id, sequential=True)[0]
+            obs = eval_env.normalize_obs(unnormalized_obs_dict)
+            
             done = False
             episode_profit = 0
             episode_prices = []
             
             while not done:
                 action, _states = agent.predict(obs, deterministic=True)
-                obs, reward, terminated, truncated, info = eval_env.step(action)
-                done = terminated or truncated
-                episode_profit += reward
-                if not done:
-                    episode_prices.append(info['price'])
+                # Correctly unpack 4 values from VecEnv.step()
+                obs, reward, dones, info_list = eval_env.step([action]) 
+
+                done = dones[0] # Get the done status for the single environment
+                
+                # Reward is a numpy array (reward for each env). We need the scalar for our single env.
+                episode_profit += reward[0]
+
+                if not done: # If the episode is not yet done
+                    episode_prices.append(info_list[0]['price']) # info_list is a list of dicts, get price from the first (and only) env
             
             agent_profits.append(episode_profit)
             agent_price_sequences.append(episode_prices)

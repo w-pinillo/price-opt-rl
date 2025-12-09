@@ -146,7 +146,9 @@ class MultiProductPriceEnv(gym.Env):
         unscaled_price = self.avg_price_scaler.inverse_transform(scaled_price)[0][0]
 
         if self.action_type == "discrete":
-            price_multiplier = self.config['env']['discrete_action_map'][action]
+            # Convert action to scalar integer as it comes as a numpy array from VecEnv
+            action_index = int(action)
+            price_multiplier = self.config['env']['discrete_action_map'][action_index]
         else:
             price_multiplier = action[0]
 

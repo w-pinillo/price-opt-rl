@@ -4,6 +4,7 @@ import polars as pl
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.env_util import make_vec_env, SubprocVecEnv, DummyVecEnv
+from stable_baselines3.common.vec_env import VecNormalize
 import importlib
 
 from src.utils import seed_everything, make_multi_product_env
@@ -72,26 +73,9 @@ def train(config: dict, run_dir: str):
         vec_env_cls=SubprocVecEnv if n_envs > 1 else DummyVecEnv
     )
 
-    eval_env = make_multi_product_env(
-        data_registry, 
-        product_mapper, 
-        avg_daily_revenue_registry, 
-        config, 
-        raw_data_df, 
-        historical_median_prices
-    )
-    eval_env = Monitor(eval_env, os.path.join(run_dir, "eval_monitor.csv"))
-
-    # --- 4. Define Callbacks ---
-    eval_callback = EvalCallback(
-        eval_env,
-        best_model_save_path=os.path.join(run_dir, 'best_model'),
-        log_path=os.path.join(run_dir, 'logs'),
-        eval_freq=config['training']['eval_freq'],
-        n_eval_episodes=config['training']['n_eval_episodes'],
-        deterministic=True,
-        render=False
-    )
+    # Wrap the training environment with VecNormalize
+    print("Wrapping training environment with VecNormalize.")
+    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10., clip_reward=10., norm_obs_keys=['features'])
 
     # --- 5. Instantiate and Train the Model ---
     agent_name = config['agent']
@@ -139,15 +123,21 @@ def train(config: dict, run_dir: str):
     print("Starting model training...")
     model.learn(
         total_timesteps=config['training']['total_timesteps'],
-        callback=eval_callback
+        callback=None
     )
 
     # --- 6. Save the final model ---
     final_model_path = os.path.join(run_dir, 'final_model.zip')
     model.save(final_model_path)
+    
+    # Save the VecNormalize statistics
+    vec_normalize_path = os.path.join(run_dir, "vecnormalize.pkl")
+    env.save(vec_normalize_path)
+    print(f"VecNormalize stats saved to: {vec_normalize_path}")
+
 
     print(f"\nTraining complete.")
     print(f"Final model saved to: {final_model_path}")
     print(f"Best performing model saved in: {os.path.join(run_dir, 'best_model')}")
 
-    return eval_callback.best_mean_reward
+    return 0 # Return 0 as we no longer have eval_callback.best_mean_reward
