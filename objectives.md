@@ -30,7 +30,7 @@ To provide a comprehensive evaluation of the DRL pricing agents by answering thr
 3.  **Reliability:** Are their pricing strategies stable and consistent over time, and robust to changes in market conditions?
 
 ## Objective 5 - Hardware Acceleration and Experimentation
-**Status: In Progress**
+**Status: Completed**
 
 ### Goal
 Configure the project and system environment to leverage a powerful desktop with a dedicated NVIDIA GPU (Ryzen 7 9700X, RTX 5060 Ti 16GB) to accelerate training and hyperparameter tuning.
@@ -40,10 +40,10 @@ Configure the project and system environment to leverage a powerful desktop with
 - [x] **Environment Setup:** Install NVIDIA drivers, CUDA Toolkit, and cuDNN.
 - [x] **Python Dependencies:** Create a Python virtual environment and install the GPU-enabled version of PyTorch.
 - [x] **Configuration:** Add a `device: cuda` parameter to `configs/base_config.yaml`.
-- [ ] **Code Modification:** Modify `src/models/train_agent.py` to use the new `device` configuration.
-- [ ] **Performance Tuning:** Increase `n_envs`, `batch_size`, and `buffer_size` in experiment configs to better utilize the hardware.
-- [ ] **Parallelization:** Update `optimize_agent.py` to run Optuna trials in parallel by setting the `n_jobs` parameter.
-- [ ] **Verification:** Run a short test experiment and verify GPU utilization is active and efficient using a tool like `nvidia-smi`.
+- [x] **Code Modification:** Modify `src/models/train_agent.py` to use the new `device` configuration.
+- [x] **Performance Tuning:** Increase `n_envs`, `batch_size`, and `buffer_size` in experiment configs to better utilize the hardware.
+- [x] **Parallelization:** Update `optimize_agent.py` to run Optuna trials in parallel by setting the `n_jobs` parameter.
+- [x] **Verification:** Run a short test experiment and verify GPU utilization is active and efficient using a tool like `nvidia-smi`.
 
 ### Notes on Memory Optimization (from previous work)
 
@@ -56,12 +56,10 @@ Configure the project and system environment to leverage a powerful desktop with
 **Current Status (December 5, 2025):**
 - **Resolved:** The critical Out-Of-Memory (OOM) blocker related to the data pipeline has been resolved. By using the pre-aggregated data option, the pipeline runs efficiently on memory-constrained systems.
 
-**Criticality:**
-- With the data pipeline unblocked, there are no longer critical memory-related impediments to proceeding with agent training and evaluation.
-
 **Recommendations for Future Experiments and Hyperparameter Optimization:**
 -   **Limit Optuna Parallelization:** When running `optimize_agent.py`, it is still advisable to explicitly set `--n-jobs 1` to prevent excessive memory use from concurrent training processes.
 -   **Monitor GPU Usage:** Regularly use `nvidia-smi` during training to confirm that the GPU is actively utilized.
+-   **Parallel Hyperparameter Tuning:** `optimize_agent.py` already supports parallel execution via the `--n-jobs` command-line argument. On the new hardware, a higher value (e.g., `--n-jobs 4`) can be used to accelerate hyperparameter searches.
 
 **Next Steps:**
 - Proceed with the remaining tasks in the Objective 5 to-do list (Code Modification, Performance Tuning, etc.).
