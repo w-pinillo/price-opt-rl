@@ -2,16 +2,19 @@
 agent: ppo
 training:
   n_envs: 4
+  agent: "PPO"
 env:
   action_type: continuous
 agent_params:
   ppo:
+    embedding_dim: 16
     learning_rate: 0.0003
-    n_steps: 2048
-    batch_size: 16384
+    n_steps: 4096
+    batch_size: 2048
     n_epochs: 10
     gamma: 0.99
     gae_lambda: 0.95
     clip_range: 0.2
-    ent_coef: 0.0
-    embedding_dim: 16
+    ent_coef: 0.05
+    policy_kwargs:
+      net_arch: [256, 256]

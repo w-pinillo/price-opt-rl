@@ -26,16 +26,6 @@ def calculate_price_volatility(prices: list) -> float:
     price_changes = np.diff(prices)
     return np.std(price_changes)
 
-def calculate_do_nothing_baseline(raw_product_df: pl.DataFrame, median_price: float, episode_horizon: int, cost_ratio: float) -> tuple[float, float]:
-    """
-    Calculates the 'Do-Nothing' baseline profit and volatility.
-    Volatility is 0 as the price is constant.
-    """
-    fixed_cost_per_unit = median_price * cost_ratio
-    total_units_in_horizon = raw_product_df.head(episode_horizon)['total_units'].sum()
-    gross_profit = (median_price - fixed_cost_per_unit) * total_units_in_horizon
-    return gross_profit, 0.0 # Profit and Volatility
-
 def calculate_trend_based_baseline(raw_product_df: pl.DataFrame, product_id: int, episode_horizon: int, cost_ratio: float, simulator: ParametricDemandSimulator) -> tuple[float, float]:
     """
     Calculates the 'Trend-Based Heuristic' baseline profit and volatility.
@@ -59,8 +49,10 @@ def calculate_trend_based_baseline(raw_product_df: pl.DataFrame, product_id: int
         
         if ma_7 > ma_30:
             price_multiplier = 1.05
-        else:
+        elif ma_7 < ma_30:
             price_multiplier = 0.95
+        else:
+            price_multiplier = 1.00
             
         heuristic_price = row['avg_price'] * price_multiplier
         prices.append(heuristic_price)
@@ -81,10 +73,10 @@ def calculate_trend_based_baseline(raw_product_df: pl.DataFrame, product_id: int
 def generate_scatter_plot(results_df: pd.DataFrame, output_dir: str):
     """Generates and saves a scatter plot of improvement vs. sales volatility."""
     plt.figure(figsize=(10, 6))
-    plt.scatter(results_df['Sales Volatility'], results_df['Improvement vs Do-Nothing (%)'], alpha=0.6)
+    plt.scatter(results_df['Sales Volatility'], results_df['Improvement vs Trend (%)'], alpha=0.6)
     plt.title('Agent Profit Improvement vs. Historical Sales Volatility')
     plt.xlabel('Historical Sales Volatility (StdDev of Units Sold)')
-    plt.ylabel('Profit Improvement vs. Do-Nothing (%)')
+    plt.ylabel('Profit Improvement vs. Trend-Based Baseline (%)')
     plt.grid(True)
     
     plot_path = os.path.join(output_dir, "improvement_vs_volatility.png")
@@ -217,14 +209,6 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
                 print(f"Historical Average Prices: N/A (raw_product_df_eval is empty)")
             print(f"--------------------------------------")
             
-        median_price = historical_median_prices[raw_product_id]
-        do_nothing_profit, do_nothing_volatility = calculate_do_nothing_baseline(
-            raw_product_df_eval,
-            median_price,
-            config['env']['episode_horizon'],
-            config['env'].get('cost_ratio', 0.7)
-        )
-
         trend_based_profit, trend_based_volatility = calculate_trend_based_baseline(
             raw_product_df_eval,
             dense_id,
@@ -236,18 +220,14 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
         avg_agent_profit = np.mean(agent_profits)
         avg_agent_volatility = np.mean([calculate_price_volatility(p) for p in agent_price_sequences])
         
-        improvement_over_do_nothing = ((avg_agent_profit - do_nothing_profit) / abs(do_nothing_profit)) * 100 if do_nothing_profit != 0 else float('inf')
         improvement_over_trend = ((avg_agent_profit - trend_based_profit) / abs(trend_based_profit)) * 100 if trend_based_profit != 0 else float('inf')
 
         all_results.append({
             "Product ID": raw_product_id,
             "Agent Profit": avg_agent_profit,
             "Agent Volatility": avg_agent_volatility,
-            "Do-Nothing Profit": do_nothing_profit,
-            "Do-Nothing Volatility": do_nothing_volatility,
             "Trend-Based Profit": trend_based_profit,
             "Trend-Based Volatility": trend_based_volatility,
-            "Improvement vs Do-Nothing (%)": improvement_over_do_nothing,
             "Improvement vs Trend (%)": improvement_over_trend,
             "Sales Volatility": historical_sales_volatility.get(raw_product_id, 0)
         })
@@ -258,16 +238,11 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
     print(results_df.to_string(index=False, float_format="%.2f"))
     print("\n" + "-"*30)
 
-    avg_improvement_do_nothing = results_df[results_df['Improvement vs Do-Nothing (%)'] != np.inf]['Improvement vs Do-Nothing (%)'].mean()
     avg_improvement_trend = results_df[results_df['Improvement vs Trend (%)'] != np.inf]['Improvement vs Trend (%)'].mean()
-    products_improved_do_nothing = (results_df['Improvement vs Do-Nothing (%)'] > 0).sum()
     products_improved_trend = (results_df['Improvement vs Trend (%)'] > 0).sum()
     total_products = len(results_df)
 
     print("\n--- Aggregate Performance ---")
-    print(f"Average Improvement over 'Do-Nothing' Baseline: {avg_improvement_do_nothing:.2f}%")
-    print(f"Agent outperformed 'Do-Nothing' for {products_improved_do_nothing} of {total_products} products ({products_improved_do_nothing/total_products:.1%})")
-    print("-" * 20)
     print(f"Average Improvement over 'Trend-Based' Baseline: {avg_improvement_trend:.2f}%")
     print(f"Agent outperformed 'Trend-Based' for {products_improved_trend} of {total_products} products ({products_improved_trend/total_products:.1%})")
     print("--- End of Summary ---")

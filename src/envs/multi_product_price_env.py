@@ -150,7 +150,8 @@ class MultiProductPriceEnv(gym.Env):
             action_index = int(action)
             price_multiplier = self.config['env']['discrete_action_map'][action_index]
         else:
-            price_multiplier = action[0]
+            # Ensure price_multiplier is a standard Python float
+            price_multiplier = float(action[0])
 
         new_price = unscaled_price * price_multiplier
 
