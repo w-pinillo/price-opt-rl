@@ -65,6 +65,9 @@ def objective(trial: optuna.trial.Trial, agent_name: str, study_dir: str) -> flo
     agent_params = define_search_space(trial, agent_name)
     override_config = {
         'agent': agent_name,
+        'training': {
+            'agent': agent_name
+        },
         'agent_params': {
             agent_name: agent_params
         }

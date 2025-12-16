@@ -8,6 +8,7 @@ import torch
 import gymnasium as gym
 
 def fit_save_scalers(df: pl.DataFrame, feature_cols: list, output_path: str, scaler_type: str = "StandardScaler"):
+    print(f"--- Entering fit_save_scalers for path: {output_path} ---")
     """
     Fits scalers on the provided DataFrame for the specified feature columns
     and saves them to the output path.

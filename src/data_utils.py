@@ -22,6 +22,13 @@ def load_data_registry(data_path: str, output_path: str):
     full_df = pl.read_parquet(data_path)
     full_df = full_df.fill_nan(0)
 
+    # Ensure 'product_id' column exists, renaming from 'PROD_CODE' if necessary.
+    if "product_id" not in full_df.columns:
+        if "PROD_CODE" in full_df.columns:
+            full_df = full_df.rename({"PROD_CODE": "product_id"})
+        else:
+            raise ValueError("Dataset must contain either 'PROD_CODE' or 'product_id' column.")
+
     unique_product_codes = sorted(full_df["product_id"].unique().to_list()) # Changed PROD_CODE to product_id
     product_mapper = {raw_id: idx for idx, raw_id in enumerate(unique_product_codes)}
 

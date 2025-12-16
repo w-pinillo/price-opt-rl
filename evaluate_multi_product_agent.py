@@ -127,10 +127,11 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
     agent_name = config['training']['agent']
     agent_class = get_agent_class(agent_name)
     print(f"Loading agent from {agent_path}...")
-    # Handle the .zip extension automatically added by stable-baselines3
+    # The path passed to the load function should not have the .zip extension.
     if agent_path.endswith('.zip'):
         agent_path = agent_path[:-4]
-    agent = agent_class.load(f"{agent_path}.zip")
+    # The stable-baselines3 load function adds the .zip extension automatically.
+    agent = agent_class.load(agent_path)
 
     print("Creating evaluation environment...")
     # Create a dummy VecEnv to load the normalizer stats
@@ -218,13 +219,15 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
         )
 
         avg_agent_profit = np.mean(agent_profits)
+        agent_profit_std = np.std(agent_profits) # Calculate standard deviation
         avg_agent_volatility = np.mean([calculate_price_volatility(p) for p in agent_price_sequences])
         
         improvement_over_trend = ((avg_agent_profit - trend_based_profit) / abs(trend_based_profit)) * 100 if trend_based_profit != 0 else float('inf')
 
         all_results.append({
             "Product ID": raw_product_id,
-            "Agent Profit": avg_agent_profit,
+            "Agent Profit (Mean)": avg_agent_profit,
+            "Agent Profit (Std)": agent_profit_std, # Add standard deviation
             "Agent Volatility": avg_agent_volatility,
             "Trend-Based Profit": trend_based_profit,
             "Trend-Based Volatility": trend_based_volatility,
@@ -235,26 +238,36 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
     results_df = pd.DataFrame(all_results)
     
     print("\n\n--- Evaluation Summary ---")
+    # Update column names for clarity
+    results_df = results_df.rename(columns={"Agent Profit": "Agent Profit (Mean)", "Agent Profit Std": "Agent Profit (Std)"})
     print(results_df.to_string(index=False, float_format="%.2f"))
     print("\n" + "-"*30)
 
-    avg_improvement_trend = results_df[results_df['Improvement vs Trend (%)'] != np.inf]['Improvement vs Trend (%)'].mean()
-    products_improved_trend = (results_df['Improvement vs Trend (%)'] > 0).sum()
-    total_products = len(results_df)
+    # Calculate portfolio-wide total profits
+    total_agent_profit = results_df['Agent Profit (Mean)'].sum()
+    total_trend_based_profit = results_df['Trend-Based Profit'].sum()
+
+    # Calculate portfolio-wide improvement percentage
+    portfolio_improvement_percentage = ((total_agent_profit - total_trend_based_profit) / abs(total_trend_based_profit)) * 100
 
     print("\n--- Aggregate Performance ---")
-    print(f"Average Improvement over 'Trend-Based' Baseline: {avg_improvement_trend:.2f}%")
-    print(f"Agent outperformed 'Trend-Based' for {products_improved_trend} of {total_products} products ({products_improved_trend/total_products:.1%})")
+    print(f"Total Agent Profit: {total_agent_profit:,.2f}")
+    print(f"Total Trend-Based Profit: {total_trend_based_profit:,.2f}")
+    print(f"Portfolio-wide Improvement vs. Trend-Based Baseline: {portfolio_improvement_percentage:.2f}%")
     print("--- End of Summary ---")
     
     # Generate and save the scatter plot
     generate_scatter_plot(results_df, run_dir)
+    
+    # Save results to CSV
+    results_csv_path = os.path.join(run_dir, "evaluation_results.csv")
+    results_df.to_csv(results_csv_path, index=False)
+    print(f"\nDetailed evaluation results saved to {results_csv_path}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate a multi-product DRL agent across all products.")
     parser.add_argument("--agent-path", type=str, required=True, help="Path to the trained agent's .zip file.")
-    parser.add_argument("--episodes", type=int, default=1, help="Number of episodes to run per product for evaluation.")
     parser.add_argument("--use-pre-aggregated-data", action="store_true", help="Use pre-aggregated data for evaluation.")
     parser.add_argument("--pre-aggregated-data-path", type=str, default="data/processed/top100_daily.parquet", help="Path to the pre-aggregated data file.")
     parser.add_argument("--log-product-ids", type=str, default="", help="Comma-separated list of product IDs to log pricing decisions for.")
@@ -263,4 +276,7 @@ if __name__ == "__main__":
     
     log_product_ids = [pid.strip() for pid in args.log_product_ids.split(',')] if args.log_product_ids else []
     
-    evaluate(args.agent_path, args.episodes, args.use_pre_aggregated_data, args.pre_aggregated_data_path, log_product_ids)
+    # Hardcode the number of episodes for evaluation as per the new methodology
+    NUM_EVAL_EPISODES = 10
+    
+    evaluate(args.agent_path, NUM_EVAL_EPISODES, args.use_pre_aggregated_data, args.pre_aggregated_data_path, log_product_ids)

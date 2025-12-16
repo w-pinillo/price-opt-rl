@@ -9,7 +9,7 @@ env:
   action_high: 1.1 # Upper bound for continuous action price multiplier
   reward_formulation: revenue # Options: revenue, profit, revenue_minus_volatility
   demand_simulator_approach: parametric # Options: parametric, ml_model
-  episode_horizon: 365 # Number of days in one episode
+  episode_horizon: 90 # Number of days in one episode
 
   # Parametric Demand Simulator Parameters
   parametric_simulator:

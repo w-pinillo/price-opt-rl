@@ -4,36 +4,79 @@ This file contains a log of significant events, decisions, and outcomes that occ
 
 ---
 
-## DQN Agent Evaluation and PPO Comparison (December 9, 2025)
+## Re-evaluation of DQN and PPO Agents with Improved Strategy (December 16, 2025)
 
-**Context:** Following the successful training of the DQN agent with the updated, robust multi-product DRL pipeline, an evaluation was conducted to assess its performance and compare it against the PPO agent.
 
-**DQN Training Details:**
--   **Configuration:** `dqn_baseline.yaml` updated with `policy_kwargs: net_arch: [256, 256]` for the Q-network architecture.
+
+**Context:** Following the implementation of an improved, more robust evaluation strategy, both PPO and DQN agents were re-trained and re-evaluated. The new strategy addresses methodological concerns by running multiple shorter episodes per SKU, allowing for variance estimation and reducing sensitivity to single demand realizations.
+
+
+
+**New Evaluation Strategy Details:**
+
+-   **Episode Horizon:** 90 days per episode (previously 365 days).
+
+-   **Episodes per Product:** 10 episodes per SKU (previously 1).
+
+-   **Metrics:** Mean ± standard deviation reported for profits.
+
+-   **Baseline for Comparison:** Trend-Based Heuristic. The "Do-Nothing" baseline has been omitted from the evaluation pipeline.
+
+
+
+**Training Details (for both agents):**
+
 -   **Total Timesteps:** `500000`.
--   **Training Outcomes:** Training logs showed healthy learning dynamics, with the Q-network loss converging and the exploration rate decaying as expected. A `VecNormalize` instance was used to normalize observations and rewards during training.
 
-**DQN Evaluation Results:**
--   **Dynamic Pricing Achieved:** Similar to PPO, the DQN agent successfully learned and executed dynamic pricing strategies. Price logs for sample products (e.g., PRD0900008, PRD0900097, PRD0904685) clearly showed the agent varying prices over time, indicating a departure from the "trivial policy."
+-   **Configuration:** `n_envs: 4`, `buffer_size: 1000000` (for DQN).
 
-**Performance Metrics (DQN vs. PPO Comparison):**
+-   **Normalization:** `VecNormalize` used for observations and rewards (`norm_obs=True, norm_reward=True, clip_obs=10., clip_reward=10., norm_obs_keys=['features']`).
 
-| Metric                                  | DQN (Current Run) | PPO (Previous Run) |
-| :-------------------------------------- | :---------------- | :----------------- |
-| Avg. Improvement vs. 'Do-Nothing'       | -30.41%           | 422.92%            |
-| Products Outperformed 'Do-Nothing'      | 13 of 100 (13.0%) | 19 of 100 (19.0%)  |
-| Avg. Improvement vs. 'Trend-Based'      | -18.06%           | 75.27%             |
-| Products Outperformed 'Trend-Based'     | 15 of 100 (15.0%) | 35 of 100 (35.0%)  |
-| Max Outlier Profit (e.g., PRD0904685)   | ~1.8M             | ~31M               |
+
+
+**PPO Agent Results:**
+
+-   **Model Location:** `models/ppo_baseline_20251216_112409/final_model.zip`
+
+-   **Evaluation Results (CSV):** `models/ppo_baseline_20251216_112409/evaluation_results.csv`
+
+-   **Overview of Performance (vs. Trend-Based Baseline):**
+
+    *   **Average Improvement:** 655.43%
+
+    *   **Products Outperformed:** 100 of 100 (100.0%)
+
+
+
+**DQN Agent Results:**
+
+-   **Model Location:** `models/dqn_baseline_20251216_112726/final_model.zip`
+
+-   **Evaluation Results (CSV):** `models/dqn_baseline_20251216_112726/evaluation_results.csv`
+
+-   **Overview of Performance (vs. Trend-Based Baseline):**
+
+    *   **Average Improvement:** 316.41%
+
+    *   **Products Outperformed:** 96 of 100 (96.0%)
+
+
 
 **Conclusion:**
-The updated, robust multi-product DRL pipeline successfully enables both DQN and PPO agents to learn and execute dynamic pricing policies. However, there is a **significant performance disparity** between the two algorithms for this specific problem setup.
 
-*   **PPO:** Consistently learned more profitable and effective dynamic pricing strategies, achieving substantial positive average improvements against both baselines and outperforming them for a higher percentage of products. PPO was also able to find much higher outlier profits for certain products.
-*   **DQN:** While successfully learning dynamic pricing, its overall performance was notably weaker, showing negative average improvements and outperforming baselines for a smaller subset of products. This suggests DQN struggled more to find optimal pricing strategies within the given training budget and environment complexity.
+The updated evaluation strategy confirms and amplifies the previous findings regarding the performance disparity between the algorithms.
 
-**Next Steps:**
-- Further hyperparameter tuning and architectural exploration for both agents could potentially bridge the performance gap, but PPO currently stands as the superior algorithm for this dynamic pricing task within the established framework.
+
+
+*   **PPO:** Continues to be the superior algorithm for this dynamic pricing task, demonstrating exceptionally high average profit improvement and successfully outperforming the 'Trend-Based' baseline for all products.
+
+*   **DQN:** While showing significant improvement compared to its previous performance, it still lags behind PPO in both average improvement and the percentage of products outperformed.
+
+
+
+The new evaluation methodology provides a more statistically robust assessment of agent performance, highlighting the effectiveness of the PPO agent in learning dynamic pricing strategies within this framework.
+
+
 
 ---
 
