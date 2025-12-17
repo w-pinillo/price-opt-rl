@@ -3,8 +3,9 @@ import lightgbm as lgb
 import joblib
 import os
 import json # Import json
+import yaml # Import yaml
 
-def train_demand_model(data_path: str, model_output_path: str):
+def train_demand_model(data_path: str, model_output_path: str, lgbm_params: dict):
     """
     Trains a LightGBM model to predict demand (total_units) and saves it,
     along with the list of feature names.
@@ -15,13 +16,13 @@ def train_demand_model(data_path: str, model_output_path: str):
     # Define target and features
     target_col = "total_units"
     
-    # Exclude only basic identifiers and target/leakage columns.
-    # The incoming data is assumed to be clean from the pipeline.
+    # Exclude identifiers, the target itself, and other metrics that would leak information.
+    # Also excluding raw time features that are now represented by sin/cos transformations.
     feature_cols = [
         col for col in train_df.columns 
         if col not in [
-            "SHOP_DATE", "PROD_CODE", "total_units", "total_sales",
-            "day_of_week", "month", "year" # Remove intermediate date features
+            "SHOP_DATE", "product_id", "PROD_CATEGORY", "total_units", "total_sales", 
+            "day_of_week", "month", "year", "day", "is_weekend"
         ]
     ]
     
@@ -33,9 +34,10 @@ def train_demand_model(data_path: str, model_output_path: str):
     # Print the actual feature names that will be used for training
     print(f"Actual features used for training: {X_train.columns}")
 
+    print(f"Feature columns being passed to LightGBM: {X_train.columns}")
     print("Training LightGBM demand model...")
-    # Initialize and train the model with default parameters
-    lgbm = lgb.LGBMRegressor(random_state=42)
+    # Initialize and train the model
+    lgbm = lgb.LGBMRegressor(**lgbm_params)
     lgbm.fit(X_train.to_numpy(), y_train.to_numpy())
 
     # Ensure the output directory exists
@@ -54,10 +56,15 @@ def train_demand_model(data_path: str, model_output_path: str):
 
 
 if __name__ == "__main__":
-    DATA_PATH = "data/processed/train_scaled.parquet"
-    MODEL_OUTPUT_PATH = "models/demand_model/lgbm_demand_model.joblib"
+    # Load base config to get paths and model parameters
+    with open("configs/base_config.yaml", 'r') as f:
+        base_config = yaml.safe_load(f)
+
+    DATA_PATH = base_config['paths']['processed_data_dir'] + '/train_scaled.parquet'
+    MODEL_OUTPUT_PATH = base_config['models']['demand_model_path']
+    LGBM_PARAMS = base_config['models']['lgbm_demand_model_params']
     
     if not os.path.exists(DATA_PATH):
         print(f"Error: Training data not found at {DATA_PATH}")
     else:
-        train_demand_model(DATA_PATH, MODEL_OUTPUT_PATH)
+        train_demand_model(DATA_PATH, MODEL_OUTPUT_PATH, LGBM_PARAMS)

@@ -1,10 +1,8 @@
 # configs/experiments/dqn_baseline.yaml
 agent: dqn
-
 training:
   n_envs: 4
-  agent: "DQN" # Explicitly set agent for training to DQN
-
+  agent: "DQN"
 agent_params:
   dqn:
     embedding_dim: 16
@@ -18,4 +16,4 @@ agent_params:
     gradient_steps: 1
     target_update_interval: 1000
     policy_kwargs:
-      net_arch: [256, 256] # Two hidden layers with 256 units each
+      net_arch: [256, 256]
