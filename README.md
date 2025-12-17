@@ -15,7 +15,7 @@ The project implements a full pipeline to train and evaluate DRL agents (PPO and
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/your-username/price-opt-rl.git
+    git clone https://github.com/w-pinillo/price-opt-rl.git
     cd price-opt-rl
     ```
 
