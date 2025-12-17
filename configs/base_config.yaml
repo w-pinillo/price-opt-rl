@@ -1,6 +1,6 @@
 # config.yaml
 
-# Objective 2: MDP and Simulation Environment Configuration
+# MDP and Simulation Environment Configuration
 
 env:
   action_type: discrete # Options: discrete, continuous
@@ -22,10 +22,10 @@ env:
   ml_model_simulator:
     noise_std: 0.0719 # Standard deviation of demand noise calibrated from residuals
 
-# Objective 3: DRL Agent Training Configuration
+# DRL Agent Training Configuration
 
 training:
-  agent: "DQN" # Default agent, will be overridden by experiment files
+  agent: "DQN" # Default agent
   total_timesteps: 100000
   eval_freq: 10000
   n_eval_episodes: 10
@@ -45,7 +45,7 @@ paths:
   models_dir: models
   test_data: data/processed/test_scaled.parquet
   price_scaler: models/scalers/avg_price_standardscaler.joblib
-  features_scaler: models/scalers/features_standardscaler.joblib # Assuming this exists
+  features_scaler: models/scalers/features_standardscaler.joblib
   top_100_ids: data/processed/top100_ids.json
 
 models:
