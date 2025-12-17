@@ -76,4 +76,3 @@ The evaluation script will output a detailed summary of the agent's performance.
 | `src/`    | Source code for the DRL pipeline, including data processing, environments, and models. |
 
 ---
-*This `README.md` was simplified based on the original content.*
