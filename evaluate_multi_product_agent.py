@@ -10,7 +10,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from src.utils import make_multi_product_env
 from src.data_utils import load_data_registry, load_product_registry
-from src.envs.simulators import ParametricDemandSimulator
+from src.envs.simulators import MLDemandSimulator
 
 # This is a placeholder for get_agent_class from train_agent.py
 # In a real implementation, this might be moved to a shared utils file.
@@ -26,26 +26,42 @@ def calculate_price_volatility(prices: list) -> float:
     price_changes = np.diff(prices)
     return np.std(price_changes)
 
-def calculate_trend_based_baseline(raw_product_df: pl.DataFrame, product_id: int, episode_horizon: int, cost_ratio: float, simulator: ParametricDemandSimulator) -> tuple[float, float]:
+def calculate_trend_based_baseline(
+    scaled_product_df: pl.DataFrame, 
+    raw_product_df: pl.DataFrame, 
+    episode_horizon: int, 
+    cost_ratio: float, 
+    simulator: MLDemandSimulator, 
+    avg_price_scaler, 
+    all_feature_cols: list
+) -> tuple[float, float]:
     """
-    Calculates the 'Trend-Based Heuristic' baseline profit and volatility.
+    Calculates the 'Trend-Based Heuristic' baseline profit and volatility using an ML demand simulator.
     """
-    df = raw_product_df.with_columns([
+    # Calculate moving averages on the raw, unscaled prices
+    raw_df_ma = raw_product_df.with_columns([
         pl.col("avg_price").rolling_mean(window_size=7).alias("ma_7"),
         pl.col("avg_price").rolling_mean(window_size=30).alias("ma_30")
     ]).drop_nulls()
 
-    if len(df) < episode_horizon:
+    # Ensure we have enough data
+    if len(raw_df_ma) < episode_horizon or len(scaled_product_df) < episode_horizon:
         return 0.0, 0.0
 
     total_profit = 0
     prices = []
     
-    sim_df = df.head(episode_horizon)
-    
-    for row in sim_df.iter_rows(named=True):
-        ma_7 = row['ma_7']
-        ma_30 = row['ma_30']
+    sim_df_scaled = scaled_product_df.head(episode_horizon)
+    sim_df_raw = raw_df_ma.head(episode_horizon)
+
+    price_feature_index = all_feature_cols.index("avg_price")
+
+    for i in range(episode_horizon):
+        raw_row = sim_df_raw.row(i, named=True)
+        scaled_row = sim_df_scaled.row(i, named=True)
+
+        ma_7 = raw_row['ma_7']
+        ma_30 = raw_row['ma_30']
         
         if ma_7 > ma_30:
             price_multiplier = 1.05
@@ -53,18 +69,27 @@ def calculate_trend_based_baseline(raw_product_df: pl.DataFrame, product_id: int
             price_multiplier = 0.95
         else:
             price_multiplier = 1.00
-            
-        heuristic_price = row['avg_price'] * price_multiplier
-        prices.append(heuristic_price)
         
-        units_sold = simulator.simulate_demand(
-            product_id=product_id,
-            current_price=heuristic_price,
-            current_ref_price=row['avg_price']
-        )
+        # Heuristic price is based on the unscaled historical price
+        heuristic_price = raw_row['avg_price'] * price_multiplier
+        prices.append(heuristic_price)
+
+        # --- Feature vector preparation for ML model ---
+        # 1. Get the scaled feature vector for the current step
+        feature_vector = np.array([scaled_row[col] for col in all_feature_cols], dtype=np.float32)
+
+        # 2. Scale the new heuristic price
+        scaled_heuristic_price = avg_price_scaler.transform(np.array([[heuristic_price]]))[0][0]
+
+        # 3. Substitute the scaled price into the feature vector
+        feature_vector[price_feature_index] = scaled_heuristic_price
+        
+        # 4. Simulate demand using the ML model
+        units_sold = simulator.simulate_demand(feature_vector)
         units_sold = round(max(0, units_sold))
 
-        fixed_cost_per_unit = row['avg_price'] * cost_ratio
+        # Profit calculation
+        fixed_cost_per_unit = raw_row['avg_price'] * cost_ratio
         total_profit += (heuristic_price - fixed_cost_per_unit) * units_sold
         
     volatility = calculate_price_volatility(prices)
@@ -158,7 +183,10 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
     # Don't normalize rewards during evaluation to get true reward values
     eval_env.norm_reward = False
 
+    # --- 3. Get necessary components from the environment for baseline calculation ---
     demand_simulator = eval_env.get_attr("demand_simulator")[0]
+    avg_price_scaler = eval_env.get_attr("avg_price_scaler")[0]
+    all_feature_cols = eval_env.get_attr("all_feature_cols")[0]
 
     all_results = []
     product_list = list(product_mapper.keys())
@@ -173,8 +201,6 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
         print(f"\n({i+1}/{len(product_list)}) Evaluating Product: {raw_product_id}")
 
         for episode in range(episodes):
-            # Use env_method to call the custom reset method on the underlying environment
-            # This returns the un-normalized observation, so we must normalize it
             unnormalized_obs_dict, _ = eval_env.env_method('reset', product_id=dense_id, sequential=True)[0]
             obs = eval_env.normalize_obs(unnormalized_obs_dict)
             
@@ -186,24 +212,22 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
                 action, _states = agent.predict(obs, deterministic=True)
                 obs, reward, dones, info_list = eval_env.step([action]) 
 
-                done = dones[0] # Get the done status for the single environment
-                
-                # Reward is a numpy array (reward for each env). We need the scalar for our single env.
+                done = dones[0]
                 episode_profit += reward[0]
 
-                if not done: # If the episode is not yet done
-                    episode_prices.append(info_list[0]['price']) # info_list is a list of dicts, get price from the first (and only) env
+                if not done:
+                    episode_prices.append(info_list[0]['price'])
             
             agent_profits.append(episode_profit)
             agent_price_sequences.append(episode_prices)
         
+        # --- 4. Calculate Baseline Profit ---
         raw_product_df_eval = raw_data_df.filter(pl.col("PROD_CODE") == raw_product_id)
+        scaled_product_df_eval = data_registry[dense_id]
         
-        # Add logging here
         if raw_product_id in log_product_ids:
             print(f"\n--- Price Log for Product: {raw_product_id} ---")
             print(f"Agent Prices (Episode 0): {[f'{p:.2f}' for p in agent_price_sequences[0]] if agent_price_sequences else 'N/A'}")
-            # Ensure raw_product_df_eval is not empty before accessing 'avg_price'
             if not raw_product_df_eval.is_empty():
                 print(f"Historical Average Prices: {[f'{p:.2f}' for p in raw_product_df_eval.head(len(agent_price_sequences[0]))['avg_price'].to_list()]}")
             else:
@@ -211,15 +235,17 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
             print(f"--------------------------------------")
             
         trend_based_profit, trend_based_volatility = calculate_trend_based_baseline(
-            raw_product_df_eval,
-            dense_id,
-            config['env']['episode_horizon'],
-            config['env'].get('cost_ratio', 0.7),
-            demand_simulator
+            scaled_product_df=scaled_product_df_eval,
+            raw_product_df=raw_product_df_eval,
+            episode_horizon=config['env']['episode_horizon'],
+            cost_ratio=config['env'].get('cost_ratio', 0.7),
+            simulator=demand_simulator,
+            avg_price_scaler=avg_price_scaler,
+            all_feature_cols=all_feature_cols
         )
 
         avg_agent_profit = np.mean(agent_profits)
-        agent_profit_std = np.std(agent_profits) # Calculate standard deviation
+        agent_profit_std = np.std(agent_profits)
         avg_agent_volatility = np.mean([calculate_price_volatility(p) for p in agent_price_sequences])
         
         improvement_over_trend = ((avg_agent_profit - trend_based_profit) / abs(trend_based_profit)) * 100 if trend_based_profit != 0 else float('inf')
@@ -227,7 +253,7 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
         all_results.append({
             "Product ID": raw_product_id,
             "Agent Profit (Mean)": avg_agent_profit,
-            "Agent Profit (Std)": agent_profit_std, # Add standard deviation
+            "Agent Profit (Std)": agent_profit_std,
             "Agent Volatility": avg_agent_volatility,
             "Trend-Based Profit": trend_based_profit,
             "Trend-Based Volatility": trend_based_volatility,
@@ -238,16 +264,12 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
     results_df = pd.DataFrame(all_results)
     
     print("\n\n--- Evaluation Summary ---")
-    # Update column names for clarity
     results_df = results_df.rename(columns={"Agent Profit": "Agent Profit (Mean)", "Agent Profit Std": "Agent Profit (Std)"})
     print(results_df.to_string(index=False, float_format="%.2f"))
     print("\n" + "-"*30)
 
-    # Calculate portfolio-wide total profits
     total_agent_profit = results_df['Agent Profit (Mean)'].sum()
     total_trend_based_profit = results_df['Trend-Based Profit'].sum()
-
-    # Calculate portfolio-wide improvement percentage
     portfolio_improvement_percentage = ((total_agent_profit - total_trend_based_profit) / abs(total_trend_based_profit)) * 100
 
     print("\n--- Aggregate Performance ---")
@@ -256,10 +278,8 @@ def evaluate(agent_path: str, episodes: int, use_pre_aggregated_data: bool, pre_
     print(f"Portfolio-wide Improvement vs. Trend-Based Baseline: {portfolio_improvement_percentage:.2f}%")
     print("--- End of Summary ---")
     
-    # Generate and save the scatter plot
     generate_scatter_plot(results_df, run_dir)
     
-    # Save results to CSV
     results_csv_path = os.path.join(run_dir, "evaluation_results.csv")
     results_df.to_csv(results_csv_path, index=False)
     print(f"\nDetailed evaluation results saved to {results_csv_path}")
@@ -276,7 +296,6 @@ if __name__ == "__main__":
     
     log_product_ids = [pid.strip() for pid in args.log_product_ids.split(',')] if args.log_product_ids else []
     
-    # Hardcode the number of episodes for evaluation as per the new methodology
-    NUM_EVAL_EPISODES = 10
+    NUM_EVAL_EPISODES = 1
     
     evaluate(args.agent_path, NUM_EVAL_EPISODES, args.use_pre_aggregated_data, args.pre_aggregated_data_path, log_product_ids)

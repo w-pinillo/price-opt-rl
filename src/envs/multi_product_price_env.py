@@ -4,7 +4,7 @@ import numpy as np
 import polars as pl
 import os
 
-from src.envs.simulators import ParametricDemandSimulator
+from src.envs.simulators import MLDemandSimulator
 from src.utils import load_scalers
 
 class MultiProductPriceEnv(gym.Env):
@@ -36,6 +36,14 @@ class MultiProductPriceEnv(gym.Env):
         
         self.product_ids = list(self.data_registry.keys())
 
+        # --- Simulator Instantiation ---
+        self.demand_simulator = MLDemandSimulator(
+            model_path=self.config['models']['demand_model_path'],
+            noise_std=self.config['env']['ml_model_simulator']['noise_std'],
+            random_generator=self.np_random
+        )
+        self.all_feature_cols = self.demand_simulator.feature_names
+
         # Define all features that were scaled during data preparation
         self.all_scaled_features = [
             "avg_price", "total_units", "total_sales",
@@ -50,30 +58,8 @@ class MultiProductPriceEnv(gym.Env):
         self.scalers = load_scalers(self.config['paths']['scalers_dir'], self.all_scaled_features)
         self.avg_price_scaler = self.scalers['avg_price']
 
-        self.feature_cols = [
-            "avg_price", "lag_1_units", "lag_7_units", "lag_14_units", "lag_28_units",
-            "rolling_mean_7_units", "rolling_mean_28_units",
-            "rolling_std_7_units", "rolling_std_28_units",
-            "price_change_pct", "days_since_price_change", "price_position"
-        ]
-        self.time_cols = ["day_of_week", "month", "year", "day_of_month", "week_of_year", "is_weekend"]
-
-        # --- Refactored Simulator Instantiation ---
-        # Create parameter maps for each product. For now, we use the same global
-        # parameters for all products, but this architecture supports per-product models.
-        sim_params = self.config['env']['parametric_simulator']
-        beta_price_map = {pid: sim_params['beta_price'] for pid in self.product_ids}
-        noise_std_map = {pid: sim_params['noise_std'] for pid in self.product_ids}
-        base_demand_map = {pid: sim_params['base_demand'] for pid in self.product_ids}
-        ref_price_map = {pid: sim_params['ref_price'] for pid in self.product_ids}
-
-        self.demand_simulator = ParametricDemandSimulator(
-            beta_price=beta_price_map,
-            noise_std=noise_std_map,
-            base_demand=base_demand_map,
-            ref_price=ref_price_map,
-            random_generator=self.np_random
-        )
+        # Get the index of 'avg_price' for later substitution
+        self.price_feature_index = self.all_feature_cols.index("avg_price")
 
         if self.action_type == "discrete":
             self.action_space = spaces.Discrete(len(self.config['env']['discrete_action_map']))
@@ -88,7 +74,7 @@ class MultiProductPriceEnv(gym.Env):
             "product_id": spaces.Discrete(len(self.product_ids)),
             "features": spaces.Box(
                 low=-np.inf, high=np.inf, 
-                shape=(len(self.feature_cols) + len(self.time_cols),), 
+                shape=(len(self.all_feature_cols),), 
                 dtype=np.float32
             )
         })
@@ -101,7 +87,7 @@ class MultiProductPriceEnv(gym.Env):
 
     def _get_obs(self):
         current_row = self.df.row(self.current_step, named=True)
-        obs_features = [current_row[col] for col in self.feature_cols + self.time_cols]
+        obs_features = [current_row[col] for col in self.all_feature_cols]
         
         return {
             "product_id": self.current_product_id,
@@ -146,20 +132,24 @@ class MultiProductPriceEnv(gym.Env):
         unscaled_price = self.avg_price_scaler.inverse_transform(scaled_price)[0][0]
 
         if self.action_type == "discrete":
-            # Convert action to scalar integer as it comes as a numpy array from VecEnv
             action_index = int(action)
             price_multiplier = self.config['env']['discrete_action_map'][action_index]
         else:
-            # Ensure price_multiplier is a standard Python float
             price_multiplier = float(action[0])
 
         new_price = unscaled_price * price_multiplier
 
-        units_sold = self.demand_simulator.simulate_demand(
-            product_id=self.current_product_id,
-            current_price=new_price, 
-            current_ref_price=unscaled_price
-        )
+        # Get the current feature vector from the observation
+        obs_features = self._get_obs()['features'].copy()
+        
+        # Scale the new price
+        scaled_new_price = self.avg_price_scaler.transform(np.array([[new_price]]))[0][0]
+        
+        # Substitute the historical price with the new price in the feature vector
+        obs_features[self.price_feature_index] = scaled_new_price
+        
+        # Simulate demand using the ML model
+        units_sold = self.demand_simulator.simulate_demand(obs_features)
 
         reward = new_price * units_sold
 
@@ -172,7 +162,6 @@ class MultiProductPriceEnv(gym.Env):
             info["units_sold"] = units_sold
             info["price"] = new_price
         else:
-            # Create a zeroed-out observation for the terminal state
             obs_features_shape = self.observation_space["features"].shape
             observation = {
                 "product_id": self.current_product_id,

@@ -22,7 +22,7 @@ def train_demand_model(data_path: str, model_output_path: str, lgbm_params: dict
         col for col in train_df.columns 
         if col not in [
             "SHOP_DATE", "product_id", "PROD_CATEGORY", "total_units", "total_sales", 
-            "day_of_week", "month", "year", "day", "is_weekend"
+            "day_of_week", "month", "year", "day", "is_weekend", "SHOP_WEEK"
         ]
     ]
     
@@ -38,7 +38,7 @@ def train_demand_model(data_path: str, model_output_path: str, lgbm_params: dict
     print("Training LightGBM demand model...")
     # Initialize and train the model
     lgbm = lgb.LGBMRegressor(**lgbm_params)
-    lgbm.fit(X_train.to_numpy(), y_train.to_numpy())
+    lgbm.fit(X_train.to_pandas(), y_train.to_pandas())
 
     # Ensure the output directory exists
     output_dir = os.path.dirname(model_output_path)
