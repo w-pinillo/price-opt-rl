@@ -3,6 +3,7 @@ from gymnasium import spaces
 import numpy as np
 import polars as pl
 import os
+import json # Import json
 
 from src.envs.simulators import MLDemandSimulator
 from src.utils import load_scalers
@@ -33,16 +34,34 @@ class MultiProductPriceEnv(gym.Env):
 
         self.action_type = self.config['env']['action_type']
         self.episode_horizon = self.config['env']['episode_horizon']
+        self.cost_ratio = self.config['env'].get('cost_ratio', 0.75) # Default to 25% profit margin
+
+        # Pre-compute costs for all products
+        self.costs = {
+            prod_id: self.historical_avg_prices.get(prod_id, 0) * self.cost_ratio 
+            for prod_id in self.product_mapper.keys()
+        }
         
         self.product_ids = list(self.data_registry.keys())
 
         # --- Simulator Instantiation ---
+        model_path = self.config['models']['demand_model_path']
+        model_dir = os.path.dirname(model_path)
+        feature_names_path = os.path.join(model_dir, "feature_names.json")
+        if not os.path.exists(feature_names_path):
+            raise FileNotFoundError(f"Feature names file not found at {feature_names_path}. "
+                                    f"Ensure it was saved during demand model training.")
+        with open(feature_names_path, 'r') as f:
+            env_feature_names_list = json.load(f)
+
+        self.all_feature_cols = env_feature_names_list # Define environment's feature order
+
         self.demand_simulator = MLDemandSimulator(
-            model_path=self.config['models']['demand_model_path'],
+            model_path=model_path,
             noise_std=self.config['env']['ml_model_simulator']['noise_std'],
+            env_feature_names=self.all_feature_cols, # Pass environment's feature names to simulator
             random_generator=self.np_random
         )
-        self.all_feature_cols = self.demand_simulator.feature_names
 
         # Define all features that were scaled during data preparation
         self.all_scaled_features = [
@@ -83,6 +102,7 @@ class MultiProductPriceEnv(gym.Env):
         self.current_step = 0
         self.start_step = 0
         self.current_product_id = None
+        self.raw_product_id = None
         self.df = None
 
     def _get_obs(self):
@@ -96,11 +116,13 @@ class MultiProductPriceEnv(gym.Env):
 
     def _get_info(self):
         current_row = self.df.row(self.current_step, named=True)
+        cost_per_unit = self.costs.get(self.raw_product_id, 0)
         return {
             "date": current_row.get("SHOP_DATE"),
             "product_id": self.current_product_id, # This is the dense id
-            "raw_product_id": current_row.get("PROD_CODE"),
+            "raw_product_id": self.raw_product_id,
             "scaled_avg_price": current_row.get("avg_price"),
+            "cost_per_unit": cost_per_unit
         }
 
     def reset(self, seed=None, options=None, product_id: int = None, sequential: bool = False):
@@ -111,6 +133,9 @@ class MultiProductPriceEnv(gym.Env):
         else:
             self.current_product_id = self.np_random.choice(self.product_ids)
         
+        # Get the raw product id from the dense id
+        self.raw_product_id = next(key for key, value in self.product_mapper.items() if value == self.current_product_id)
+
         self.df = self.data_registry[self.current_product_id]
 
         if sequential:
@@ -150,8 +175,12 @@ class MultiProductPriceEnv(gym.Env):
         
         # Simulate demand using the ML model
         units_sold = self.demand_simulator.simulate_demand(obs_features)
+        units_sold = round(max(0, units_sold))
 
-        reward = new_price * units_sold
+        # --- REWARD CALCULATION ---
+        cost_per_unit = self.costs.get(self.raw_product_id, 0)
+        profit = (new_price - cost_per_unit) * units_sold
+        reward = profit
 
         self.current_step += 1
         done = self.current_step >= (self.start_step + self.episode_horizon) or self.current_step >= len(self.df) - 1
@@ -161,6 +190,7 @@ class MultiProductPriceEnv(gym.Env):
             info = self._get_info()
             info["units_sold"] = units_sold
             info["price"] = new_price
+            info["profit"] = profit
         else:
             obs_features_shape = self.observation_space["features"].shape
             observation = {
@@ -173,6 +203,7 @@ class MultiProductPriceEnv(gym.Env):
         truncated = False
 
         return observation, reward, terminated, truncated, info
+
 
     def render(self):
         if self.render_mode == "human":

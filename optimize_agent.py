@@ -87,16 +87,11 @@ def objective(trial: optuna.trial.Trial, agent_name: str, study_dir: str) -> flo
     with open(os.path.join(run_dir, "config.yaml"), "w") as f:
         yaml.dump(config, f, default_flow_style=False)
         
-    print(f"\n--- Starting Trial {trial.number} for {agent_name.upper()} ---")
-    for key, value in agent_params.items():
-        print(f"{key}: {value}")
-    print("--------------------")
-
     # --- 4. Train Agent and Get Reward ---
     try:
         # Reduce verbosity for optimization runs
-        config['training']['total_timesteps'] = 50000 # Use shorter runs for faster tuning
-        config['training']['eval_freq'] = 5000
+        config['training']['total_timesteps'] = 10000 # Use shorter runs for faster tuning
+        config['training']['eval_freq'] = 1000
         
         mean_reward = train_agent.train(config=config, run_dir=run_dir)
         
@@ -109,9 +104,6 @@ def objective(trial: optuna.trial.Trial, agent_name: str, study_dir: str) -> flo
         print(f"Error: {e}")
         # Prune trial if it fails
         raise optuna.exceptions.TrialPruned()
-
-    print(f"--- Trial {trial.number} Finished ---")
-    print(f"Mean Reward: {mean_reward}")
     
     return mean_reward
 

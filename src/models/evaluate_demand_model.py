@@ -6,6 +6,7 @@ import os
 import matplotlib.pyplot as plt
 import random
 import yaml
+import json # Import json
 
 def evaluate_demand_model(data_path: str, lgbm_model_path: str, plot: bool = False):
     """
@@ -16,15 +17,18 @@ def evaluate_demand_model(data_path: str, lgbm_model_path: str, plot: bool = Fal
 
     # Define target and features
     target_col = "total_units"
-    feature_cols = [
-        col for col in test_df.columns 
-        if col not in [
-            "SHOP_DATE", "product_id", "PROD_CATEGORY", "total_units", "total_sales", 
-            "day_of_week", "month", "year", "day", "is_weekend"
-        ]
-    ]
     
-    X_test = test_df[feature_cols]
+    # Load feature names saved during training
+    model_dir = os.path.dirname(lgbm_model_path)
+    feature_names_path = os.path.join(model_dir, "feature_names.json")
+    if not os.path.exists(feature_names_path):
+        raise FileNotFoundError(f"Feature names file not found at {feature_names_path}. "
+                                f"Ensure it was saved during demand model training.")
+    with open(feature_names_path, 'r') as f:
+        trained_feature_cols = json.load(f)
+
+    # Ensure features are in the same order as trained
+    X_test = test_df[trained_feature_cols]
     y_test = test_df[target_col]
 
     print("Loading LightGBM model...")
@@ -42,7 +46,7 @@ def evaluate_demand_model(data_path: str, lgbm_model_path: str, plot: bool = Fal
     print(f"| Metric                 | LightGBM         |")
     print(f"|------------------------|------------------|")
     print(f"| R-squared              | {lgbm_r2:<16.4f} |")
-    print(f"| Mean Absolute Error    | {lgbm_mae:<16.4f} |")
+    print(f"| MAE (regression_l1)    | {lgbm_mae:<16.4f} |")
     print(f"| Root Mean Squared Error| {lgbm_rmse:<16.4f} |")
     print("------------------------------------\n")
 

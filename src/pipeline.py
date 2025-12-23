@@ -1,6 +1,7 @@
 import polars as pl
 import os
 import gc
+import json # Added import json
 from src.etl import load_raw_data, save_product_ids
 from src.features import select_top_products, aggregate_daily_lazy, generate_time_series_features_lazy
 from src.utils import fit_save_scalers, load_scalers, apply_scalers # Import scaling utilities
@@ -103,7 +104,7 @@ def run_data_pipeline(config):
 
     # Define feature columns for scaling
     feature_cols = [
-        "avg_price", "total_units", "total_sales",
+        "avg_price", "total_sales", # total_units should NOT be scaled as it is the target
         "day_of_week_sin", "day_of_week_cos", "month_sin", "month_cos",
         "lag_1_units", "lag_7_units", "lag_14_units", "lag_28_units",
         "rolling_mean_7_units", "rolling_mean_28_units",
@@ -111,12 +112,11 @@ def run_data_pipeline(config):
         "price_change_pct",
         "day_of_month", "week_of_year", "is_weekend",
         "days_since_price_change", "price_position",
-        # "SHOP_WEEK" removed from feature_cols as it's an ID/context column, not a feature to be scaled
     ]
     
     # Identify non-feature columns that are needed for context but not scaling
-    id_cols = ["SHOP_DATE", "product_id", "SHOP_WEEK"] # SHOP_WEEK is an int, but used for joining later, not a feature to be scaled
-
+    id_cols = ["SHOP_DATE", "product_id", "SHOP_WEEK"] # SHOP_WEEK is now excluded from features
+    
     # Define temporal split dates
     train_end_date = pl.lit("2008-01-10").str.strptime(pl.Date, "%Y-%m-%d")
     val_end_date = pl.lit("2008-04-10").str.strptime(pl.Date, "%Y-%m-%d")

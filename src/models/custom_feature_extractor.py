@@ -21,8 +21,6 @@ class CustomFeatureExtractor(BaseFeaturesExtractor):
             embedding_dim=self.embedding_dim
         )
         
-        print(f"DEBUG: Final CustomFeatureExtractor calculated input dim: {self._features_dim}")
-
     def forward(self, observations) -> th.Tensor:
         product_ids_raw = observations["product_id"].long()
         

@@ -23,7 +23,7 @@ training:
   n_eval_episodes: 10
   seed: 42
   device: "cuda" # "cuda" to use GPU, "cpu" for CPU
-  n_envs: 1 # Number of parallel environments
+  n_envs: 4 # Number of parallel environments
 
 # Cross-cutting Configuration
 data_config:

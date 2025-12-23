@@ -37,7 +37,6 @@ def load_data_registry(data_path: str, output_path: str):
     registry_file = os.path.join(output_path, "product_registry.json")
     with open(registry_file, 'w') as f:
         json.dump(product_mapper, f, indent=4)
-    print(f"Product registry saved to {registry_file}")
 
     data_registry = {}
     avg_daily_revenue_registry = {}
@@ -55,7 +54,6 @@ def load_data_registry(data_path: str, output_path: str):
         avg_daily_revenue = total_sales / num_unique_days if num_unique_days > 0 else 0
         avg_daily_revenue_registry[dense_id] = avg_daily_revenue
 
-    print(f"Data registry created for {len(unique_product_codes)} products.")
     return data_registry, product_mapper, avg_daily_revenue_registry
 
 def load_product_registry(registry_path: str) -> dict:

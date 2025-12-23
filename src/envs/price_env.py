@@ -5,6 +5,7 @@ import polars as pl
 from sklearn.preprocessing import StandardScaler
 import os # Added for os.path.join
 from typing import Optional
+import json # Import json
 
 from src.envs.simulators import ParametricDemandSimulator, MLDemandSimulator
 from src.utils import load_scalers, apply_scalers # Import load_scalers and apply_scalers
@@ -41,18 +42,12 @@ class PriceEnv(gym.Env):
         self.current_product_df = None # Scaled data for observation
         self.current_raw_product_df = None # Raw data for ground truth calculations
 
-        # Define all features that were scaled during data preparation
-        self.all_scaled_features = [
-            "avg_price", "total_units", "total_sales",
-            "day_of_week_sin", "day_of_week_cos", "month_sin", "month_cos",
-            "lag_1_units", "lag_7_units", "lag_14_units", "lag_28_units",
-            "rolling_mean_7_units", "rolling_mean_28_units",
-            "rolling_std_7_units", "rolling_std_28_units",
-            "price_change_pct",
-            "day_of_month", "week_of_year", "is_weekend",
-            "days_since_price_change", "price_position",
-            "SHOP_WEEK"
-        ]
+        # Load all_scaled_features from the saved JSON file
+        feature_cols_path = os.path.join(self.config['paths']['scalers_dir'], "feature_cols_for_env.json")
+        if not os.path.exists(feature_cols_path):
+            raise FileNotFoundError(f"Feature columns definition not found at {feature_cols_path}. Please run the data pipeline first.")
+        with open(feature_cols_path, 'r') as f:
+            self.all_scaled_features = json.load(f)
 
         # Load all scalers
         self.scalers = load_scalers(self.config['paths']['scalers_dir'], self.all_scaled_features)
@@ -67,13 +62,19 @@ class PriceEnv(gym.Env):
             "rolling_std_7_units", "rolling_std_28_units",
             "price_change_pct", "days_since_price_change", "price_position"
         ]
+        
+        # Dynamically add PROD_CATEGORY OHE columns to feature_cols if they exist in all_scaled_features
+        for col in self.all_scaled_features:
+            if col.startswith("PROD_CATEGORY_DEP_") and col not in self.feature_cols:
+                self.feature_cols.append(col)
+
         self.time_cols = ["day_of_week", "month", "year", "day_of_month", "week_of_year", "is_weekend"]
         
         # Features for the ML demand model (must match training features exactly)
         # Dynamically construct this list based on all_scaled_features and exclusions
         ml_model_exclusions = [
             "SHOP_DATE", "product_id", "total_units", "total_sales", 
-            "day_of_week", "month", "year", "day", "is_weekend"
+            "day_of_week", "month", "year", "day", "is_weekend", "SHOP_WEEK"
         ]
         self.feature_cols_ml_model = [
             col for col in self.all_scaled_features
@@ -92,10 +93,28 @@ class PriceEnv(gym.Env):
             )
         elif simulator_approach == "ml_model":
             model_path = os.path.join(self.config['paths']['models_dir'], 'demand_model/lgbm_demand_model.joblib')
+            # It's crucial that the feature_names passed to MLDemandSimulator are in the exact order
+            # the model was trained with. We get this from the feature_names.json saved during training.
+            demand_model_feature_names_path = os.path.join(self.config['paths']['models_dir'], 'demand_model/feature_names.json')
+            if not os.path.exists(demand_model_feature_names_path):
+                raise FileNotFoundError(f"Demand model feature names not found at {demand_model_feature_names_path}. Please train the demand model first.")
+            with open(demand_model_feature_names_path, 'r') as f:
+                ml_model_expected_feature_names = json.load(f)
+
+            # Reorder self.feature_cols_ml_model to match the order expected by the trained model
+            # This ensures consistency even if the order in all_scaled_features changes slightly
+            # Filter ml_model_expected_feature_names to only include those that are actually in all_scaled_features
+            # This handles cases where some OHE columns might not be present in every product's data
+            ordered_ml_features = [col for col in ml_model_expected_feature_names if col in self.all_scaled_features]
+            
+            # Additional check: ensure all features in ml_model_expected_feature_names are present in ordered_ml_features,
+            # or handle missing ones if they can genuinely be absent (e.g., specific OHE categories).
+            # For now, we assume they should all be present in all_scaled_features.
+            
             self.demand_simulator = MLDemandSimulator(
                 model_path=model_path,
                 noise_std=self.config['env']['ml_model_simulator']['noise_std'],
-                feature_names=self.feature_cols_ml_model,
+                feature_names=ordered_ml_features, # Pass the ordered and filtered feature names
                 random_generator=self.np_random
             )
         else:
@@ -126,10 +145,17 @@ class PriceEnv(gym.Env):
 
     def _get_obs(self):
         current_row = self.current_product_df.row(self.current_step, named=True)
-        obs_features = [current_row[col] for col in self.feature_cols + self.time_cols]
+        obs_features = [current_row[col] for col in self.feature_cols if col in current_row]
+        obs_time_cols = [current_row[col] for col in self.time_cols if col in current_row]
+        
+        # Ensure that features and time_cols are concatenated correctly.
+        # It's important to maintain the order and consistency of the observation space.
+        # If some time_cols are not in current_row, they will be skipped, which might alter observation space shape.
+        # This logic needs to be robust. For now, assuming they are always present.
+        
         return {
             "product_id": self.current_product_id,
-            "features": np.array(obs_features, dtype=np.float32)
+            "features": np.array(obs_features + obs_time_cols, dtype=np.float32)
         }
 
     def _get_info(self):
@@ -203,10 +229,18 @@ class PriceEnv(gym.Env):
             # and then apply scalers to get the appropriate input for the ML model.
 
             # Get the features from the current SCALED row
-            row_data_for_scaling = {col: [current_scaled_row[col]] for col in self.all_scaled_features if col in current_scaled_row}
-            
+            # Ensure all features in self.all_scaled_features are included
+            row_data_for_ml_input = {}
+            for col in self.all_scaled_features:
+                # Handle cases where a feature might not be in the current row (e.g., some OHE columns for specific products)
+                # For OHE columns, if they are not present, their value should be 0.
+                if col.startswith("PROD_CATEGORY_DEP_"):
+                    row_data_for_ml_input[col] = [current_scaled_row.get(col, 0.0)]
+                else:
+                    row_data_for_ml_input[col] = [current_scaled_row[col]]
+
             # Create a temporary Polars DataFrame from the current scaled row
-            current_df_for_ml_input = pl.DataFrame(row_data_for_scaling)
+            current_df_for_ml_input = pl.DataFrame(row_data_for_ml_input)
             
             # Scale the new_price using the avg_price_scaler
             scaled_new_price = self.avg_price_scaler.transform(np.array(new_price).reshape(-1, 1))[0][0]
@@ -215,7 +249,8 @@ class PriceEnv(gym.Env):
             current_df_for_ml_input = current_df_for_ml_input.with_columns(pl.Series(name="avg_price", values=[scaled_new_price]))
 
             # Extract features in the order expected by the ML model
-            ml_features = np.array([current_df_for_ml_input[col].item() for col in self.feature_cols_ml_model], dtype=np.float32)
+            # This order is now provided by self.demand_simulator.feature_names
+            ml_features = np.array([current_df_for_ml_input[col].item() for col in self.demand_simulator.feature_names], dtype=np.float32)
             
             # Simulate demand using the ML model. The ML model predicts scaled units.
             scaled_units_sold = self.demand_simulator.simulate_demand(features=ml_features)
